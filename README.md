@@ -24,12 +24,18 @@
 - 일반 텍스트:
   - `TextMeshPro - Text (UI)`
 - 버튼:
-  - `Button` 컴포넌트는 그대로 사용
+  - 씬에서 버튼 오브젝트는 반드시 `Button - TextMeshPro`로 생성
+  - 코드에서는 Unity 구조상 `Button` 컴포넌트를 그대로 참조
   - 버튼 안의 라벨 텍스트는 반드시 `TextMeshPro - Text (UI)` 사용
 - 토글 라벨:
   - `TextMeshPro - Text (UI)` 사용
 
 즉, `Button`과 `Toggle`은 Unity UI 기본 컴포넌트를 써도 되지만, 안에 들어가는 글자는 전부 TMP여야 합니다.
+
+추가 설명:
+- `TMP_Text`, `TMP_InputField`, `TMP_Dropdown`은 있지만 `TMP_Button`이라는 별도 타입은 없습니다.
+- 따라서 `BattleSceneController`를 포함한 모든 SceneController에서 버튼 필드는 `Button` 타입으로 유지하는 것이 정상입니다.
+- 대신 Inspector에는 `Button - TextMeshPro`로 만든 버튼 오브젝트를 연결해야 합니다.
 
 ## 코드 구조
 ### 데이터
