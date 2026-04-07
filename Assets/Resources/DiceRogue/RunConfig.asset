@@ -1,0 +1,55 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 6dd49246280cfb34faf47efe0261910b, type: 3}
+  m_Name: RunConfig
+  m_EditorClassIdentifier: Assembly-CSharp::DiceRogue.RunConfig
+  bootSceneName: Boot
+  mainMenuSceneName: MainMenu
+  mapSceneName: MapScene
+  battleSceneName: BattleScene
+  rewardSceneName: RewardScene
+  playerTemplate: {fileID: 11400000, guid: 0bae708068b6fa045b22f6f5a836123a, type: 2}
+  skillLibrary:
+  - {fileID: 11400000, guid: 55c003b81ac9f034a9fc9395d431e521, type: 2}
+  - {fileID: 11400000, guid: e8ee01477400e1449bb4898960d117e0, type: 2}
+  - {fileID: 11400000, guid: 32b2b5b41e7b6814dbb2a92b9de60e9a, type: 2}
+  - {fileID: 11400000, guid: 4148e5c0e111c994e912550eac67a484, type: 2}
+  - {fileID: 11400000, guid: 6e08f75399faf7549a98665714b02230, type: 2}
+  - {fileID: 11400000, guid: 4fdd12afe22d16141af9df30a3b4cc6e, type: 2}
+  normalEnemies:
+  - {fileID: 11400000, guid: 28a7d4bc68cf10d43b7657cb1971dbea, type: 2}
+  - {fileID: 11400000, guid: 3d90a1181869bd543883c49039ddfde6, type: 2}
+  - {fileID: 11400000, guid: 13567c7ea2cd89f4fbb1c99dadd655f2, type: 2}
+  bossEnemy: {fileID: 11400000, guid: eae5ac00594bde04fab035f8d8f96185, type: 2}
+  mapNodes:
+  - id: node_a
+    displayName: Training Hall
+    nodeType: 0
+    enemyTemplate: {fileID: 11400000, guid: 28a7d4bc68cf10d43b7657cb1971dbea, type: 2}
+    nextNodeIndices: 02000000
+  - id: node_b
+    displayName: Raid Camp
+    nodeType: 0
+    enemyTemplate: {fileID: 11400000, guid: 3d90a1181869bd543883c49039ddfde6, type: 2}
+    nextNodeIndices: 02000000
+  - id: node_c
+    displayName: Stone Gate
+    nodeType: 0
+    enemyTemplate: {fileID: 11400000, guid: 13567c7ea2cd89f4fbb1c99dadd655f2, type: 2}
+    nextNodeIndices: 03000000
+  - id: node_d
+    displayName: Boss Room
+    nodeType: 1
+    enemyTemplate: {fileID: 11400000, guid: eae5ac00594bde04fab035f8d8f96185, type: 2}
+    nextNodeIndices: 
+  autoTurnDelay: 0.85
+  maxBattleTurns: 12

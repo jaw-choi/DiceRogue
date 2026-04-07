@@ -1,0 +1,27 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 946fc2a3cb2882842b4046124f3a82c1, type: 3}
+  m_Name: Wild Raider
+  m_EditorClassIdentifier: Assembly-CSharp::DiceRogue.CombatantTemplate
+  id: raider
+  displayName: Wild Raider
+  maxHp: 24
+  startingArmor: 0
+  startingRage: 1
+  isBoss: 0
+  diceSkills:
+  - {fileID: 11400000, guid: 55c003b81ac9f034a9fc9395d431e521, type: 2}
+  - {fileID: 11400000, guid: 6e08f75399faf7549a98665714b02230, type: 2}
+  - {fileID: 11400000, guid: 55c003b81ac9f034a9fc9395d431e521, type: 2}
+  - {fileID: 11400000, guid: 4148e5c0e111c994e912550eac67a484, type: 2}
+  - {fileID: 11400000, guid: e8ee01477400e1449bb4898960d117e0, type: 2}
+  - {fileID: 11400000, guid: 55c003b81ac9f034a9fc9395d431e521, type: 2}
