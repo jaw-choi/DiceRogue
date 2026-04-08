@@ -3,9 +3,17 @@ namespace DiceRogue
     public enum SkillActionType
     {
         Attack = 0,
-        Guard = 1,
-        Heal = 2,
-        Berserk = 3
+        Defense = 1,
+        Buff = 2,
+        Debuff = 3
+    }
+
+    public enum SkillTargetType
+    {
+        Self = 0,
+        RandomEnemy = 1,
+        HighestHpEnemy = 2,
+        AllEnemies = 3
     }
 
     public enum RewardType

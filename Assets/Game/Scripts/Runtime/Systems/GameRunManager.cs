@@ -25,7 +25,7 @@ namespace DiceRogue
         public List<RewardOptionRuntime> CurrentRewards { get; private set; } = new List<RewardOptionRuntime>();
         public int CurrentBattleNodeIndex { get; private set; } = -1;
         public bool AutoBattleEnabled { get; set; } = true;
-        public string LastRunMessage { get; private set; } = "Press Start Run to begin.";
+        public string LastRunMessage { get; private set; } = "새 게임을 시작해 주사위를 성장시키세요.";
 
         public IReadOnlyCollection<string> UnlockedSkillIds => unlockedSkillIds;
 
@@ -82,7 +82,8 @@ namespace DiceRogue
 
         public void Initialize(RunConfig preferredConfig = null)
         {
-            Config = preferredConfig != null ? preferredConfig : RunContentFactory.LoadOrCreateConfig();
+            var sourceConfig = preferredConfig != null ? preferredConfig : Resources.Load<RunConfig>("DiceRogue/RunConfig");
+            Config = RunContentFactory.BuildRuntimeConfig(sourceConfig);
             RewardSystem = new RewardSystem();
             DiceSystem = new DiceSystem();
             MapSystem ??= new MapSystem();
@@ -106,7 +107,7 @@ namespace DiceRogue
                 unlockedSkillIds.Add(skillId);
             }
 
-            LastRunMessage = "Run started. Build your die and clear the boss.";
+            LastRunMessage = "런이 시작되었습니다. 주사위 면을 성장시키며 보스를 향해 이동하세요.";
         }
 
         public void StartRunFromMenu()
@@ -141,6 +142,16 @@ namespace DiceRogue
             }
         }
 
+        public void EnsureRewardChoices()
+        {
+            EnsureDebugRunForScene();
+
+            if (CurrentRewards == null || CurrentRewards.Count == 0)
+            {
+                CurrentRewards = RewardSystem.BuildRewards(Config, unlockedSkillIds);
+            }
+        }
+
         public void PrepareBattle(int nodeIndex)
         {
             EnsureDebugRunForScene();
@@ -171,7 +182,7 @@ namespace DiceRogue
 
             if (BattleSystem.BattleResult == BattleResultType.Defeat)
             {
-                LastRunMessage = "Run failed. Try changing the timing of guard and rage skills.";
+                LastRunMessage = "런이 종료되었습니다. 방어와 분노 타이밍을 다시 조정해 보세요.";
                 SceneManager.LoadScene(Config.MainMenuSceneName);
                 return;
             }
@@ -181,7 +192,7 @@ namespace DiceRogue
 
             if (node != null && node.Definition.NodeType == MapNodeType.Boss)
             {
-                LastRunMessage = "Boss cleared. Defensive build and berserker build both need another pass.";
+                LastRunMessage = "보스를 처치했습니다. 새로운 빌드로 다시 도전해 보세요.";
                 SceneManager.LoadScene(Config.MainMenuSceneName);
                 return;
             }

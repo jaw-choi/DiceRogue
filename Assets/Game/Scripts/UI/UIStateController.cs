@@ -18,6 +18,19 @@ namespace DiceRogue
                 }
             }
         }
+
+        public bool HasState(string stateId)
+        {
+            foreach (var entry in states)
+            {
+                if (string.Equals(entry.Id, stateId, StringComparison.Ordinal))
+                {
+                    return true;
+                }
+            }
+
+            return false;
+        }
     }
 
     [Serializable]

@@ -66,6 +66,7 @@
 - `Assets/Game/Scripts/Data/CombatantTemplate.cs`
 - `Assets/Game/Scripts/Data/RunConfig.cs`
 - `Assets/Game/Scripts/Runtime/Models/CombatEnums.cs`
+- `Assets/Game/Scripts/Runtime/Models/BattleActionResults.cs`
 - `Assets/Game/Scripts/Runtime/Models/RunRuntimeModels.cs`
 - `Assets/Game/Scripts/Runtime/Systems/DiceSystem.cs`
 - `Assets/Game/Scripts/Runtime/Systems/BattleSystem.cs`
@@ -79,6 +80,10 @@
 - `Assets/Game/Scripts/Scenes/MainMenuSceneController.cs`
 - `Assets/Game/Scripts/Scenes/MapSceneController.cs`
 - `Assets/Game/Scripts/Scenes/BattleSceneController.cs`
+- `Assets/Game/Scripts/Scenes/BattlePresenter.cs`
+- `Assets/Game/Scripts/Scenes/UnitView.cs`
+- `Assets/Game/Scripts/Scenes/FloatingTextSpawner.cs`
+- `Assets/Game/Scripts/Scenes/BattleHUD.cs`
 - `Assets/Game/Scripts/Scenes/RewardSceneController.cs`
 - `Assets/Game/Scripts/Editor/RunSeedDataCreator.cs`
 
@@ -288,8 +293,8 @@ MapSceneRoot
 
 ## 7. BattleScene 씬 설정
 ### 목적
-실제 전투를 진행하는 씬입니다.
-자동/수동 토글과 `주사위 굴리기` 버튼이 핵심입니다.
+기존 `BattleSystem` 전투 규칙을 그대로 사용하면서, 그 결과를 스프라이트 기반으로 보여주는 씬입니다.
+자동/수동 토글, `주사위 굴리기` 버튼, 유닛 뷰, 전투 HUD가 핵심입니다.
 
 ### 씬 생성
 1. 새 씬 생성
@@ -298,27 +303,188 @@ MapSceneRoot
 ### Hierarchy 권장 구조
 ```text
 Main Camera
+BattleBackground
 Canvas
   BattlePanel
-    TitleText(TMP)
-    TurnText(TMP)
-    PlayerStatsText(TMP)
-    EnemyStatsText(TMP)
-    PlayerDiceText(TMP)
-    BattleLogText(TMP)
+    TopBar
+      TurnInfoText(TMP)
+      DiceResultText(TMP)
+    MiddleArea
+      PlayerArea
+        PlayerUnitView
+          AnimatedRoot
+            Highlight
+            SpriteImage
+          HpBar
+          NameText(TMP)
+          HpText(TMP)
+          ShieldArmorText(TMP)
+          RageText(TMP)
+          PopupAnchor
+      EnemyArea
+        EnemyUnitView01
+          AnimatedRoot
+            Highlight
+            SpriteImage
+          HpBar
+          NameText(TMP)
+          HpText(TMP)
+          ShieldArmorText(TMP)
+          RageText(TMP)
+          PopupAnchor
+        EnemyUnitView02
+        EnemyUnitView03
+    BottomPanel
+      PlayerStatsText(TMP)
+      EnemyStatsText(TMP)
+      SummaryText(TMP)
     AutoBattleToggle
       Label(TMP)
     RollButton
       Label(TMP)
     BackToMenuButton
       Label(TMP)
+  FloatingTextCanvas
+    FloatingTextTemplate(TMP, 비활성)
   ResultPanel
     ResultText(TMP)
     ContinueButton
       Label(TMP)
 BattleStates
+BattlePresenterRoot
 BattleSceneRoot
 ```
+
+### 배경 오브젝트
+- `BattleBackground`
+  - `SpriteRenderer` 를 붙입니다.
+  - 단색 사각형 스프라이트나 간단한 던전 배경 이미지를 연결합니다.
+  - 플레이어가 왼쪽, 적이 오른쪽에 보이도록 카메라 중앙 배경 용도로 둡니다.
+
+### UnitView 프리팹/오브젝트 만들기
+`PlayerUnitView`, `EnemyUnitView01`, `EnemyUnitView02`, `EnemyUnitView03` 는 같은 구조를 사용합니다.
+
+권장 구조:
+```text
+PlayerUnitView
+  AnimatedRoot
+    Highlight
+    SpriteImage
+  HpBar
+  NameText(TMP)
+  HpText(TMP)
+  ShieldArmorText(TMP)
+  RageText(TMP)
+  PopupAnchor
+```
+
+각 자식 오브젝트 설정:
+- `AnimatedRoot`
+  - `RectTransform`
+  - 스프라이트가 실제로 앞뒤로 움직일 루트
+- `Highlight`
+  - `Image`
+  - 노란색/흰색 반투명 이미지
+  - 평소에는 꺼져 있고 행동 시 켜짐
+- `SpriteImage`
+  - `Image`
+  - 플레이어/적 플레이스홀더 스프라이트 표시
+- `HpBar`
+  - `Slider`
+  - Fill Area 를 가진 기본 슬라이더 사용
+- `NameText`
+  - `TextMeshPro - Text (UI)`
+- `HpText`
+  - `TextMeshPro - Text (UI)`
+- `ShieldArmorText`
+  - `TextMeshPro - Text (UI)`
+- `RageText`
+  - `TextMeshPro - Text (UI)`
+- `PopupAnchor`
+  - `RectTransform`
+  - 떠오르는 데미지 텍스트 기준점
+
+### `UnitView` 연결
+아래 4개 오브젝트에 모두 `UnitView` 를 붙입니다.
+- `PlayerUnitView`
+- `EnemyUnitView01`
+- `EnemyUnitView02`
+- `EnemyUnitView03`
+
+`UnitView` Inspector 연결:
+- `Animated Root`
+  - 각 UnitView의 `AnimatedRoot`
+- `Popup Anchor`
+  - 각 UnitView의 `PopupAnchor`
+- `Canvas Group`
+  - UnitView 루트에 `CanvasGroup` 추가 후 연결
+- `Sprite Image`
+  - `SpriteImage`
+- `Highlight Image`
+  - `Highlight`
+- `Hp Bar`
+  - `HpBar`
+- `Name Text`
+  - `NameText`
+- `Hp Text`
+  - `HpText`
+- `Shield Armor Text`
+  - `ShieldArmorText`
+- `Rage Text`
+  - `RageText`
+- `Fallback Sprite`
+  - 간단한 원형/사각형 플레이스홀더 스프라이트
+
+### `BattleHUD` 오브젝트
+`BattlePanel` 또는 별도 `BattleHUDRoot` 오브젝트를 만들고 `BattleHUD` 를 붙입니다.
+
+`BattleHUD` Inspector 연결:
+- `Turn Info Text`
+  - `TurnInfoText`
+- `Player Stats Text`
+  - `PlayerStatsText`
+- `Enemy Stats Text`
+  - `EnemyStatsText`
+- `Current Dice Result Text`
+  - `DiceResultText`
+- `Summary Text`
+  - `SummaryText`
+
+### FloatingText 설정
+`FloatingTextCanvas` 는 `Canvas` 아래 별도 레이어로 두는 것을 권장합니다.
+
+설정 순서:
+1. `FloatingTextCanvas` 오브젝트 생성
+2. 자식으로 `FloatingTextTemplate` 생성
+3. `FloatingTextTemplate` 는 `TextMeshPro - Text (UI)` 로 만들고 기본 문구는 `-99`
+4. 색상은 흰색, 정렬은 가운데
+5. `FloatingTextTemplate` 오브젝트는 비활성화
+
+`BattlePresenterRoot` 에 `FloatingTextSpawner` 를 붙이고 아래를 연결합니다.
+- `Canvas Root`
+  - `FloatingTextCanvas` 의 `RectTransform`
+- `Floating Text Prefab`
+  - `FloatingTextTemplate` 의 TMP 컴포넌트
+
+### `BattlePresenter` 설정
+`BattlePresenterRoot` 오브젝트를 만들고 `BattlePresenter` 를 붙입니다.
+
+`BattlePresenter` Inspector 연결:
+- `Player View`
+  - `PlayerUnitView`
+- `Enemy Views`
+  - Element 0: `EnemyUnitView01`
+  - Element 1: `EnemyUnitView02`
+  - Element 2: `EnemyUnitView03`
+- `Battle Hud`
+  - `BattleHUD` 컴포넌트
+- `Floating Text Spawner`
+  - `BattlePresenterRoot` 또는 별도 오브젝트의 `FloatingTextSpawner`
+
+현재 제약:
+- 실제 전투 데이터는 아직 단일 적 기준입니다.
+- 따라서 `EnemyUnitView02`, `EnemyUnitView03` 는 지금은 자동으로 숨겨집니다.
+- 나중에 `BattleSystem` 이 다중 적을 지원하면 같은 구조를 그대로 확장할 수 있습니다.
 
 ### 토글 만들기
 토글은 아래 메뉴를 권장합니다.
@@ -346,18 +512,10 @@ States 리스트에 2개를 추가합니다.
   - `Battle`
 - `Result State Id`
   - `Result`
-- `Title Text`
-  - TMP 컴포넌트
-- `Turn Text`
-  - TMP 컴포넌트
-- `Player Stats Text`
-  - TMP 컴포넌트
-- `Enemy Stats Text`
-  - TMP 컴포넌트
-- `Player Dice Text`
-  - TMP 컴포넌트
-- `Battle Log Text`
-  - TMP 컴포넌트
+- `Battle Hud`
+  - `BattleHUD` 컴포넌트
+- `Battle Presenter`
+  - `BattlePresenter` 컴포넌트
 - `Result Text`
   - TMP 컴포넌트
 - `Auto Battle Toggle`
@@ -368,8 +526,12 @@ States 리스트에 2개를 추가합니다.
 ### 전투 UI에서 꼭 테스트할 것
 - `Auto Battle Toggle` 이 켜져 있으면 자동 진행
 - `Auto Battle Toggle` 이 꺼져 있으면 `RollButton` 을 눌러야 턴 진행
-- 플레이어와 적의 스탯이 계속 갱신되는지 확인
-- 로그가 계속 쌓이는지 확인
+- 공격 시 공격자가 앞으로 돌진했다가 돌아오는지 확인
+- 공격 시 방어자 스프라이트가 피격 반응을 보이는지 확인
+- 데미지/실드/회복/Rage 텍스트가 떠오르는지 확인
+- 플레이어와 적의 HP Bar, Shield, Armor, Rage 가 계속 갱신되는지 확인
+- 광폭화 스킬에서 `BERSERK!` 팝업이 보이는지 확인
+- 사망 시 유닛이 페이드아웃 되는지 확인
 - 전투 종료 시 `ResultPanel` 로 전환되는지 확인
 
 ## 8. RewardScene 씬 설정
@@ -535,3 +697,8 @@ States 리스트에 2개를 추가합니다.
 9. 강화 보상 후 해당 슬롯 수치가 올라간다.
 10. 보상 후 다시 맵으로 돌아간다.
 11. 보스 승리 또는 패배 후 `MainMenu` 로 돌아간다.
+## 전투 플레이스홀더 스프라이트
+- 전투 씬에 정식 유닛 이미지가 아직 없어도 전투는 바로 진행됩니다.
+- `CombatantTemplate.BattleSprite` 가 비어 있으면 `UnitView` 가 런타임에 원형 플레이스홀더 스프라이트를 자동 생성합니다.
+- `BattleScene` 에 `BattleHUD` 나 `BattlePresenter` 연결이 비어 있어도 기본 전투 UI와 유닛 뷰를 런타임에 자동 구성합니다.
+- 나중에 정식 이미지를 넣고 싶으면 각 `CombatantTemplate` 의 `BattleSprite` 만 교체하면 됩니다.

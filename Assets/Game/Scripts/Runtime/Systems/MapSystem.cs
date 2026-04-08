@@ -19,7 +19,7 @@ namespace DiceRogue
                 {
                     Index = index,
                     Definition = definitions[index],
-                    IsUnlocked = index < 2,
+                    IsUnlocked = index == 0,
                     IsCompleted = false
                 });
             }
@@ -44,15 +44,6 @@ namespace DiceRogue
             }
 
             node.IsCompleted = true;
-
-            if (index == 0 || index == 1)
-            {
-                foreach (var sibling in nodes.Where(candidate => candidate.Index is 0 or 1 && candidate.Index != index))
-                {
-                    sibling.IsCompleted = true;
-                    sibling.IsUnlocked = false;
-                }
-            }
 
             foreach (var nextIndex in node.Definition.NextNodeIndices)
             {
