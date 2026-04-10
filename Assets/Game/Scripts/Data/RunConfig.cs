@@ -61,6 +61,8 @@ namespace DiceRogue
         [SerializeField] private string id = "node_id";
         [SerializeField] private string displayName = "Battle";
         [SerializeField] private MapNodeType nodeType = MapNodeType.Battle;
+        [SerializeField] private int gridX;
+        [SerializeField] private int gridY;
         [SerializeField] private CombatantTemplate enemyTemplate;
         [SerializeField] private EncounterDefinition encounterDefinition;
         [SerializeField] private List<int> nextNodeIndices = new List<int>();
@@ -68,6 +70,9 @@ namespace DiceRogue
         public string Id => id;
         public string DisplayName => displayName;
         public MapNodeType NodeType => nodeType;
+        public int GridX => gridX;
+        public int GridY => gridY;
+        public Vector2Int GridPosition => new Vector2Int(gridX, gridY);
         public CombatantTemplate EnemyTemplate => enemyTemplate;
         public EncounterDefinition EncounterDefinition => encounterDefinition;
         public IReadOnlyList<int> NextNodeIndices => nextNodeIndices;

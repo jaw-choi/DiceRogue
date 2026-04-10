@@ -10,6 +10,7 @@ namespace DiceRogue
     {
         [SerializeField] private RunConfig runConfig;
         [SerializeField] private bool useRuntimeLayout = true;
+        [SerializeField] private bool useEditorUiLayout = false;
         [SerializeField] private UIStateController stateController;
         [SerializeField] private string battleStateId = "Battle";
         [SerializeField] private string resultStateId = "Result";
@@ -18,6 +19,7 @@ namespace DiceRogue
         [SerializeField] private TMP_Text resultText;
         [SerializeField] private Toggle autoBattleToggle;
         [SerializeField] private Button rollButton;
+        [SerializeField] private Button debugKillButton;
         [SerializeField] private Button continueButton;
         [SerializeField] private Button backToMenuButton;
 
@@ -60,6 +62,11 @@ namespace DiceRogue
                 rollButton.onClick.AddListener(ResolveOneTurn);
             }
 
+            if (debugKillButton != null)
+            {
+                debugKillButton.onClick.AddListener(ResolveDebugKill);
+            }
+
             if (continueButton != null)
             {
                 continueButton.onClick.AddListener(runManager.CompleteBattleAndAdvance);
@@ -71,6 +78,7 @@ namespace DiceRogue
             }
 
             SceneUILayoutHelper.SetButtonLabel(rollButton, "Resolve Turn");
+            SceneUILayoutHelper.SetButtonLabel(debugKillButton, "Debug Kill");
             SceneUILayoutHelper.SetButtonLabel(continueButton, "Continue");
             SceneUILayoutHelper.SetButtonLabel(backToMenuButton, "Main Menu");
         }
@@ -115,6 +123,11 @@ namespace DiceRogue
                 rollButton.interactable = !runManager.AutoBattleEnabled && !isBattleFinished && !isResolvingPresentation;
             }
 
+            if (debugKillButton != null)
+            {
+                debugKillButton.interactable = !isBattleFinished && !isResolvingPresentation;
+            }
+
             if (runManager.AutoBattleEnabled && !isBattleFinished && !isResolvingPresentation)
             {
                 if (autoBattleRoutine == null)
@@ -151,6 +164,29 @@ namespace DiceRogue
             StartCoroutine(PresentResolvedTurn(report));
         }
 
+        private void ResolveDebugKill()
+        {
+            if (runManager.BattleSystem == null || runManager.BattleSystem.IsFinished || isResolvingPresentation)
+            {
+                return;
+            }
+
+            if (autoBattleToggle != null && autoBattleToggle.isOn)
+            {
+                autoBattleToggle.isOn = false;
+            }
+            else
+            {
+                runManager.AutoBattleEnabled = false;
+            }
+
+            var report = runManager.BattleSystem.ForceVictoryForDebug();
+            battlePresenter?.BindBattle(runManager.BattleSystem);
+            battleHud?.Refresh(runManager.BattleSystem, report);
+            ApplyBattleResultState();
+            RefreshAutoFlow();
+        }
+
         private IEnumerator PresentResolvedTurn(BattleTurnReport report)
         {
             if (runManager.BattleSystem == null)
@@ -183,22 +219,7 @@ namespace DiceRogue
                 backToMenuButton.interactable = true;
             }
 
-            if (runManager.BattleSystem.IsFinished)
-            {
-                stateController?.Show(resultStateId);
-
-                if (resultText != null)
-                {
-                    resultText.text = runManager.BattleSystem.BattleResult == BattleResultType.Victory
-                        ? "Victory. Take your reward and continue the run."
-                        : "Defeat. Return to the main menu.";
-                }
-
-                if (continueButton != null)
-                {
-                    continueButton.gameObject.SetActive(true);
-                }
-            }
+            ApplyBattleResultState();
 
             RefreshAutoFlow();
         }
@@ -213,6 +234,7 @@ namespace DiceRogue
 
             battleHud = EnsureBattleHud(canvas);
             battlePresenter = EnsureBattlePresenter(canvas, battleHud);
+            debugKillButton = EnsureDebugKillButton(canvas);
         }
 
         private void ApplySceneLayout()
@@ -306,6 +328,12 @@ namespace DiceRogue
                 SceneUILayoutHelper.StyleButton(backToMenuButton, new Vector2(260f, 96f), 22f, new Color(0.2f, 0.24f, 0.34f), Color.white);
             }
 
+            if (debugKillButton != null && debugKillButton.transform is RectTransform debugKillRect)
+            {
+                SceneUILayoutHelper.SetRect(debugKillRect, new Vector2(1f, 0f), new Vector2(1f, 0f), new Vector2(1f, 0f), new Vector2(-40f, 72f), new Vector2(260f, 96f));
+                SceneUILayoutHelper.StyleButton(debugKillButton, new Vector2(260f, 96f), 22f, new Color(0.83f, 0.25f, 0.25f), Color.white);
+            }
+
             if (continueButton != null && continueButton.transform is RectTransform continueRect)
             {
                 SceneUILayoutHelper.SetRect(continueRect, new Vector2(0.5f, 0f), new Vector2(0.5f, 0f), new Vector2(0.5f, 0f), new Vector2(0f, 72f), new Vector2(360f, 96f));
@@ -342,12 +370,34 @@ namespace DiceRogue
             var canvas = FindSceneCanvas();
             SceneUILayoutHelper.ConfigureCanvas(canvas);
 
-            if (!useRuntimeLayout)
+            if (!useRuntimeLayout || useEditorUiLayout)
             {
                 return;
             }
 
             ApplySceneLayout();
+        }
+
+        private void ApplyBattleResultState()
+        {
+            if (runManager?.BattleSystem == null || !runManager.BattleSystem.IsFinished)
+            {
+                return;
+            }
+
+            stateController?.Show(resultStateId);
+
+            if (resultText != null)
+            {
+                resultText.text = runManager.BattleSystem.BattleResult == BattleResultType.Victory
+                    ? "Victory. Take your reward and continue the run."
+                    : "Defeat. Return to the main menu.";
+            }
+
+            if (continueButton != null)
+            {
+                continueButton.gameObject.SetActive(true);
+            }
         }
 
         private BattleHUD EnsureBattleHud(Canvas canvas)
@@ -452,6 +502,19 @@ namespace DiceRogue
             return spawner;
         }
 
+        private Button EnsureDebugKillButton(Canvas canvas)
+        {
+            if (debugKillButton != null || !useRuntimeLayout || useEditorUiLayout || canvas == null)
+            {
+                return debugKillButton;
+            }
+
+            var runtimeRoot = GetOrCreateChildRect(canvas.transform as RectTransform, "RuntimeBattlePresentation");
+            var sampleText = FindFirstSceneText();
+            debugKillButton = CreateRuntimeButton(runtimeRoot, "RuntimeDebugKillButton", sampleText, "Debug Kill");
+            return debugKillButton;
+        }
+
         private UnitView CreateRuntimeUnitView(RectTransform parent, string objectName, Vector2 anchoredPosition, TMP_Text sampleText)
         {
             var root = GetOrCreateChildRect(parent, objectName);
@@ -473,6 +536,25 @@ namespace DiceRogue
 
             unitView.ConfigureRuntime(root, popupAnchor, canvasGroup, spriteImage, highlightImage, hpBar, nameText, hpText, shieldArmorText, rageText);
             return unitView;
+        }
+
+        private Button CreateRuntimeButton(RectTransform parent, string objectName, TMP_Text sampleText, string labelText)
+        {
+            var root = GetOrCreateChildRect(parent, objectName);
+            SetAnchoredRect(root, Vector2.zero, new Vector2(260f, 96f));
+
+            var image = GetOrAddComponent<Image>(root.gameObject);
+            image.sprite = GetRuntimeWhiteSprite();
+            image.type = Image.Type.Simple;
+            image.color = new Color(0.83f, 0.25f, 0.25f);
+            image.raycastTarget = true;
+
+            var button = GetOrAddComponent<Button>(root.gameObject);
+            button.targetGraphic = image;
+
+            var label = CreateRuntimeText(root, "Label", sampleText, labelText, 22f, FontStyles.Bold, TextAlignmentOptions.Center, Vector2.zero, new Vector2(220f, 44f));
+            label.raycastTarget = false;
+            return button;
         }
 
         private Slider CreateRuntimeSlider(RectTransform parent, string objectName, Vector2 anchoredPosition, Vector2 size)

@@ -213,6 +213,57 @@ namespace DiceRogue
             return diceSystem.NextIndex(count);
         }
 
+        public BattleTurnReport ForceVictoryForDebug()
+        {
+            var report = new BattleTurnReport
+            {
+                TurnNumber = CurrentTurn,
+                CurrentActingUnitName = Player != null ? Player.DisplayName : string.Empty,
+                BattleResult = BattleResult
+            };
+
+            if (Player == null)
+            {
+                report.LogLines.Add("No active battle.");
+                return report;
+            }
+
+            if (IsFinished)
+            {
+                report.LogLines.Add("Battle is already finished.");
+                return report;
+            }
+
+            report.LogLines.Add("[Debug] Instant kill activated.");
+
+            foreach (var enemy in enemies)
+            {
+                if (enemy == null || !enemy.IsAlive)
+                {
+                    continue;
+                }
+
+                enemy.LoseHpDirect(enemy.CurrentHp);
+                report.LogLines.Add($"{enemy.DisplayName} was defeated instantly.");
+            }
+
+            if (!AreAnyEnemiesAlive())
+            {
+                BattleResult = BattleResultType.Victory;
+                Player.ResetTemporaryCombatState();
+                foreach (var enemy in enemies)
+                {
+                    enemy?.ResetTemporaryCombatState();
+                }
+
+                report.LogLines.Add($"{Player.DisplayName} wins the battle.");
+            }
+
+            report.BattleResult = BattleResult;
+            LogReport(report);
+            return report;
+        }
+
         private int ResolveAction(
             CombatantRuntimeState actor,
             BattleTurnReport report,

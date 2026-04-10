@@ -296,6 +296,31 @@ namespace DiceRogue
             SceneManager.LoadScene(Config.MapSceneName);
         }
 
+        public void MoveToMapNode(int nodeIndex)
+        {
+            EnsureDebugRunForScene();
+
+            var node = MapSystem.GetNode(nodeIndex);
+            if (node == null || !node.IsUnlocked)
+            {
+                return;
+            }
+
+            CurrentMapNodeIndex = nodeIndex;
+            MapSystem.MoveToNode(nodeIndex);
+            LastRunMessage = node.IsCompleted
+                ? $"{node.Definition.DisplayName} is now an empty cleared room."
+                : $"{node.Definition.DisplayName} is ahead.";
+        }
+
+        public void MoveToMapStart()
+        {
+            EnsureDebugRunForScene();
+            CurrentMapNodeIndex = -1;
+            MapSystem.MoveToStart();
+            LastRunMessage = "Returned to the starting room.";
+        }
+
         public bool ApplyPlayerBuildIdentity(DiceBuildIdentity identity)
         {
             if (PlayerState == null || Config == null)

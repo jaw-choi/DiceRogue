@@ -475,17 +475,24 @@ namespace DiceRogue
                 golemWatchEncounter,
                 shamanBossEncounter
             });
-            SetPrivateField(config, "mapNodes", new List<MapNodeDefinition>
+            SetPrivateField(config, "mapNodes", CreateGridMapNodes(new List<GridMapNodeSeed>
             {
-                CreateNode("node_a", "Dungeon Gate", MapNodeType.Battle, slimePairEncounter, 1, 2),
-                CreateNode("node_b", "Treasure Vault", MapNodeType.Reward, (CombatantTemplate)null, 3),
-                CreateNode("node_c", "Goblin Camp", MapNodeType.Battle, goblinRaidEncounter, 3),
-                CreateNode("node_d", "Forge Shop", MapNodeType.Shop, (CombatantTemplate)null, 4, 5),
-                CreateNode("node_e", "Stone Hall", MapNodeType.EliteBattle, golemWatchEncounter, 6),
-                CreateNode("node_f", "Forgotten Reliquary", MapNodeType.Reward, (CombatantTemplate)null, 6),
-                CreateNode("node_g", "Slime Bog", MapNodeType.Battle, slimeSingleEncounter, 7),
-                CreateNode("node_h", "Ritual Chamber", MapNodeType.Boss, shamanBossEncounter)
-            });
+                CreateSeed("node_01", "Bone Trail", MapNodeType.Battle, 1, 0, slimePairEncounter),
+                CreateSeed("node_02", "Ancient Cache", MapNodeType.Reward, 2, 0),
+                CreateSeed("node_03", "Traveling Forge", MapNodeType.Shop, 3, 0),
+                CreateSeed("node_04", "Slime Crossing", MapNodeType.Battle, 0, 1, slimeSingleEncounter),
+                CreateSeed("node_05", "Silent Crypt", MapNodeType.EliteBattle, 1, 1, golemWatchEncounter),
+                CreateSeed("node_06", "Forked Tunnel", MapNodeType.Battle, 2, 1, goblinRaidEncounter),
+                CreateSeed("node_07", "Forgotten Script", MapNodeType.Reward, 3, 1),
+                CreateSeed("node_08", "Hidden Shrine", MapNodeType.Reward, 0, 2),
+                CreateSeed("node_09", "Raider Nest", MapNodeType.Battle, 1, 2, goblinRaidEncounter),
+                CreateSeed("node_10", "Stone Ward", MapNodeType.EliteBattle, 2, 2, golemWatchEncounter),
+                CreateSeed("node_11", "Ritual Stairs", MapNodeType.Battle, 3, 2, slimePairEncounter),
+                CreateSeed("node_12", "Upper Path", MapNodeType.Battle, 0, 3, slimeSingleEncounter),
+                CreateSeed("node_13", "Old Reliquary", MapNodeType.Reward, 1, 3),
+                CreateSeed("node_14", "Black Market", MapNodeType.Shop, 2, 3),
+                CreateSeed("node_15", "Overlord Nest", MapNodeType.Boss, 3, 3, shamanBossEncounter)
+            }));
             SetPrivateField(config, "autoTurnDelay", 0.65f);
             SetPrivateField(config, "maxBattleTurns", 0);
             return config;
@@ -620,38 +627,76 @@ namespace DiceRogue
             return definition;
         }
 
-        private static MapNodeDefinition CreateNode(
+        private static GridMapNodeSeed CreateSeed(
             string id,
             string displayName,
             MapNodeType type,
-            CombatantTemplate enemyTemplate,
-            params int[] nextNodes)
+            int gridX,
+            int gridY,
+            EncounterDefinition encounterDefinition = null,
+            CombatantTemplate enemyTemplate = null)
         {
-            var definition = new MapNodeDefinition();
-            SetPrivateField(definition, "id", id);
-            SetPrivateField(definition, "displayName", displayName);
-            SetPrivateField(definition, "nodeType", type);
-            SetPrivateField(definition, "enemyTemplate", enemyTemplate);
-            SetPrivateField(definition, "nextNodeIndices", new List<int>(nextNodes));
-            return definition;
+            return new GridMapNodeSeed
+            {
+                Id = id,
+                DisplayName = displayName,
+                NodeType = type,
+                GridX = gridX,
+                GridY = gridY,
+                EncounterDefinition = encounterDefinition,
+                EnemyTemplate = enemyTemplate
+            };
         }
 
-        private static MapNodeDefinition CreateNode(
-            string id,
-            string displayName,
-            MapNodeType type,
-            EncounterDefinition encounterDefinition,
-            params int[] nextNodes)
+        private static List<MapNodeDefinition> CreateGridMapNodes(IReadOnlyList<GridMapNodeSeed> seeds)
+        {
+            var orderedSeeds = seeds
+                .OrderBy(seed => seed.GridY)
+                .ThenBy(seed => seed.GridX)
+                .ToList();
+            var indexByPosition = new Dictionary<Vector2Int, int>();
+
+            for (var index = 0; index < orderedSeeds.Count; index++)
+            {
+                indexByPosition[new Vector2Int(orderedSeeds[index].GridX, orderedSeeds[index].GridY)] = index;
+            }
+
+            var definitions = new List<MapNodeDefinition>(orderedSeeds.Count);
+
+            for (var index = 0; index < orderedSeeds.Count; index++)
+            {
+                var seed = orderedSeeds[index];
+                var nextNodeIndices = new List<int>();
+
+                if (indexByPosition.TryGetValue(new Vector2Int(seed.GridX + 1, seed.GridY), out var rightIndex))
+                {
+                    nextNodeIndices.Add(rightIndex);
+                }
+
+                if (indexByPosition.TryGetValue(new Vector2Int(seed.GridX, seed.GridY + 1), out var upperIndex))
+                {
+                    nextNodeIndices.Add(upperIndex);
+                }
+
+                definitions.Add(CreateNode(seed, nextNodeIndices));
+            }
+
+            return definitions;
+        }
+
+        private static MapNodeDefinition CreateNode(GridMapNodeSeed seed, List<int> nextNodes)
         {
             var definition = new MapNodeDefinition();
-            SetPrivateField(definition, "id", id);
-            SetPrivateField(definition, "displayName", displayName);
-            SetPrivateField(definition, "nodeType", type);
-            SetPrivateField(definition, "encounterDefinition", encounterDefinition);
-            SetPrivateField(definition, "enemyTemplate", encounterDefinition?.EnemyTemplates != null && encounterDefinition.EnemyTemplates.Count > 0
-                ? encounterDefinition.EnemyTemplates[0]
-                : null);
-            SetPrivateField(definition, "nextNodeIndices", new List<int>(nextNodes));
+            SetPrivateField(definition, "id", seed.Id);
+            SetPrivateField(definition, "displayName", seed.DisplayName);
+            SetPrivateField(definition, "nodeType", seed.NodeType);
+            SetPrivateField(definition, "gridX", seed.GridX);
+            SetPrivateField(definition, "gridY", seed.GridY);
+            SetPrivateField(definition, "encounterDefinition", seed.EncounterDefinition);
+            SetPrivateField(definition, "enemyTemplate", seed.EncounterDefinition?.EnemyTemplates != null && seed.EncounterDefinition.EnemyTemplates.Count > 0
+                ? seed.EncounterDefinition.EnemyTemplates[0]
+                : seed.EnemyTemplate);
+            SetPrivateField(definition, "nextNodeIndices", nextNodes);
             return definition;
         }
 
@@ -702,6 +747,17 @@ namespace DiceRogue
             SetPrivateField(encounter, "isBossEncounter", isBossEncounter);
             SetPrivateField(encounter, "enemyTemplates", new List<CombatantTemplate>(enemyTemplates));
             return encounter;
+        }
+
+        private sealed class GridMapNodeSeed
+        {
+            public string Id;
+            public string DisplayName;
+            public MapNodeType NodeType;
+            public int GridX;
+            public int GridY;
+            public EncounterDefinition EncounterDefinition;
+            public CombatantTemplate EnemyTemplate;
         }
     }
 }

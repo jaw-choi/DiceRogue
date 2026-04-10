@@ -8,6 +8,7 @@ namespace DiceRogue
     {
         [SerializeField] private RunConfig runConfig;
         [SerializeField] private bool useRuntimeLayout = true;
+        [SerializeField] private bool useEditorUiLayout = false;
         [SerializeField] private UIStateController stateController;
         [SerializeField] private string rewardSelectStateId = "RewardSelect";
         [SerializeField] private string slotSelectStateId = "SlotSelect";
@@ -319,7 +320,7 @@ namespace DiceRogue
             var canvas = SceneUILayoutHelper.FindRootCanvas();
             SceneUILayoutHelper.ConfigureCanvas(canvas);
 
-            if (!useRuntimeLayout)
+            if (!useRuntimeLayout || useEditorUiLayout)
             {
                 return;
             }

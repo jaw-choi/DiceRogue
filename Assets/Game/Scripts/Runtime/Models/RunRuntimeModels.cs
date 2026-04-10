@@ -488,8 +488,11 @@ namespace DiceRogue
     {
         public int Index;
         public MapNodeDefinition Definition;
+        public Vector2Int GridPosition;
         public bool IsUnlocked;
         public bool IsCompleted;
+        public bool IsRevealed;
+        public bool ShouldAnimateReveal;
     }
 
     [Serializable]

@@ -1,3 +1,4 @@
+using System.Collections;
 using UnityEngine;
 using UnityEngine.UI;
 using TMPro;
@@ -8,6 +9,7 @@ namespace DiceRogue
     {
         [SerializeField] private RunConfig runConfig;
         [SerializeField] private bool useRuntimeLayout = true;
+        [SerializeField] private bool useEditorUiLayout = false;
         [SerializeField] private TMP_Text titleText;
         [SerializeField] private TMP_Text statusText;
         [SerializeField] private TMP_Text configText;
@@ -15,9 +17,12 @@ namespace DiceRogue
         [SerializeField] private Button debugBattleButton;
         [SerializeField] private Button debugRewardButton;
         [SerializeField] private Button quitButton;
+        [SerializeField] private float startFadeDuration = 0.35f;
 
         private GameRunManager runManager;
         private RectTransform buttonStackRoot;
+        private Image startFadeOverlay;
+        private bool isStartingRun;
 
         private void Awake()
         {
@@ -27,7 +32,7 @@ namespace DiceRogue
 
             if (startRunButton != null)
             {
-                startRunButton.onClick.AddListener(runManager.StartRunFromMenu);
+                startRunButton.onClick.AddListener(OnStartRunRequested);
             }
 
             if (debugBattleButton != null)
@@ -49,6 +54,8 @@ namespace DiceRogue
         private void OnEnable()
         {
             ApplyLayoutIfEnabled();
+            ResetStartFadeOverlay();
+            isStartingRun = false;
 
             if (titleText != null)
             {
@@ -143,12 +150,97 @@ namespace DiceRogue
             var canvas = SceneUILayoutHelper.FindRootCanvas();
             SceneUILayoutHelper.ConfigureCanvas(canvas);
 
-            if (!useRuntimeLayout)
+            if (!useRuntimeLayout || useEditorUiLayout)
             {
                 return;
             }
 
             ApplyLayout();
+        }
+
+        private void OnStartRunRequested()
+        {
+            if (isStartingRun)
+            {
+                return;
+            }
+
+            StartCoroutine(FadeOutAndStartRun());
+        }
+
+        private IEnumerator FadeOutAndStartRun()
+        {
+            isStartingRun = true;
+            SetMenuButtonsInteractable(false);
+
+            var overlay = EnsureStartFadeOverlay();
+            if (overlay == null)
+            {
+                runManager.StartRunFromMenu();
+                yield break;
+            }
+
+            var color = overlay.color;
+            color.a = 0f;
+            overlay.color = color;
+            overlay.gameObject.SetActive(true);
+
+            var duration = Mathf.Max(0.05f, startFadeDuration);
+            var elapsed = 0f;
+
+            while (elapsed < duration)
+            {
+                elapsed += Time.unscaledDeltaTime;
+                color.a = Mathf.Clamp01(elapsed / duration);
+                overlay.color = color;
+                yield return null;
+            }
+
+            color.a = 1f;
+            overlay.color = color;
+            runManager.StartRunFromMenu();
+        }
+
+        private void SetMenuButtonsInteractable(bool interactable)
+        {
+            if (startRunButton != null) startRunButton.interactable = interactable;
+            if (debugBattleButton != null) debugBattleButton.interactable = interactable;
+            if (debugRewardButton != null) debugRewardButton.interactable = interactable;
+            if (quitButton != null) quitButton.interactable = interactable;
+        }
+
+        private Image EnsureStartFadeOverlay()
+        {
+            var canvas = SceneUILayoutHelper.FindRootCanvas();
+            if (canvas == null)
+            {
+                return null;
+            }
+
+            if (startFadeOverlay == null)
+            {
+                startFadeOverlay = SceneUILayoutHelper.EnsureFullscreenImage(canvas.transform, "RuntimeStartFadeOverlay", new Color(0f, 0f, 0f, 0f));
+                startFadeOverlay.color = new Color(0f, 0f, 0f, 0f);
+                startFadeOverlay.raycastTarget = true;
+            }
+
+            startFadeOverlay.transform.SetAsLastSibling();
+            return startFadeOverlay;
+        }
+
+        private void ResetStartFadeOverlay()
+        {
+            var overlay = EnsureStartFadeOverlay();
+            if (overlay == null)
+            {
+                return;
+            }
+
+            var color = overlay.color;
+            color.a = 0f;
+            overlay.color = color;
+            overlay.gameObject.SetActive(false);
+            SetMenuButtonsInteractable(true);
         }
     }
 }
