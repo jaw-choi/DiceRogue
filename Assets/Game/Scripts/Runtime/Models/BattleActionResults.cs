@@ -7,7 +7,8 @@ namespace DiceRogue
     {
         None = 0,
         Self = 1,
-        Enemy = 2
+        Enemy = 2,
+        Ally = 3
     }
 
     [Serializable]
@@ -51,6 +52,8 @@ namespace DiceRogue
         public int BonusDicePointsGranted;
         public int ShieldConsumed;
         public int RepeatCount;
+        public int SummonedCount;
+        public int SummonedAllyAttackBonusGranted;
         public bool ActivatedBerserk;
         public bool ActorWasDefeated;
         public readonly List<BattleTargetResult> Targets = new List<BattleTargetResult>();

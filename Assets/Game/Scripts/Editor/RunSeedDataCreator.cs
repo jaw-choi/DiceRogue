@@ -11,8 +11,10 @@ namespace DiceRogue
         private const string GeneratedRoot = "Assets/Game/Data/Generated";
         private const string SkillsRoot = GeneratedRoot + "/Skills";
         private const string CombatantsRoot = GeneratedRoot + "/Combatants";
+        private const string LoadoutsRoot = GeneratedRoot + "/Loadouts";
         private const string ResourcesRoot = "Assets/Resources/DiceRogue";
         private const string ConfigPath = ResourcesRoot + "/RunConfig.asset";
+        private const string SkillDatabasePath = ResourcesRoot + "/PrototypeSkillDatabase.asset";
 
         [MenuItem("Tools/DiceRogue/Generate Run Seed Data")]
         public static void Generate()
@@ -22,10 +24,17 @@ namespace DiceRogue
             AssetDatabase.Refresh();
 
             var config = RunContentFactory.CreateFallbackConfig();
+            var skillDatabase = RunContentFactory.CreatePrototypeSkillDatabase(config);
+            var loadouts = RunContentFactory.CreatePrototypePlayerLoadouts(config);
 
-            foreach (var skill in config.SkillLibrary.Where(skill => skill != null).Distinct())
+            foreach (var skill in skillDatabase.AllSkills.Where(skill => skill != null).Distinct())
             {
                 AssetDatabase.CreateAsset(skill, $"{SkillsRoot}/{Sanitize(skill.DisplayName)}.asset");
+            }
+
+            foreach (var loadout in loadouts.Where(loadout => loadout != null).Distinct())
+            {
+                AssetDatabase.CreateAsset(loadout, $"{LoadoutsRoot}/{Sanitize(loadout.DisplayName)}.asset");
             }
 
             foreach (var combatant in config.NormalEnemies
@@ -38,6 +47,7 @@ namespace DiceRogue
             }
 
             AssetDatabase.CreateAsset(config, ConfigPath);
+            AssetDatabase.CreateAsset(skillDatabase, SkillDatabasePath);
             AssetDatabase.SaveAssets();
             AssetDatabase.Refresh();
 
@@ -49,6 +59,7 @@ namespace DiceRogue
         {
             Directory.CreateDirectory(Path.Combine(Application.dataPath, "Game/Data/Generated/Skills"));
             Directory.CreateDirectory(Path.Combine(Application.dataPath, "Game/Data/Generated/Combatants"));
+            Directory.CreateDirectory(Path.Combine(Application.dataPath, "Game/Data/Generated/Loadouts"));
             Directory.CreateDirectory(Path.Combine(Application.dataPath, "Resources/DiceRogue"));
         }
 
@@ -62,6 +73,11 @@ namespace DiceRogue
             if (AssetDatabase.LoadAssetAtPath<RunConfig>(ConfigPath) != null)
             {
                 AssetDatabase.DeleteAsset(ConfigPath);
+            }
+
+            if (AssetDatabase.LoadAssetAtPath<SkillDatabase>(SkillDatabasePath) != null)
+            {
+                AssetDatabase.DeleteAsset(SkillDatabasePath);
             }
 
             AssetDatabase.Refresh();

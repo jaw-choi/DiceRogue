@@ -70,9 +70,9 @@ namespace DiceRogue
                 backToMenuButton.onClick.AddListener(() => SceneManager.LoadScene(runManager.Config.MainMenuSceneName));
             }
 
-            SceneUILayoutHelper.SetButtonLabel(rollButton, "굴리기");
-            SceneUILayoutHelper.SetButtonLabel(continueButton, "다음 진행");
-            SceneUILayoutHelper.SetButtonLabel(backToMenuButton, "메인으로");
+            SceneUILayoutHelper.SetButtonLabel(rollButton, "Resolve Turn");
+            SceneUILayoutHelper.SetButtonLabel(continueButton, "Continue");
+            SceneUILayoutHelper.SetButtonLabel(backToMenuButton, "Main Menu");
         }
 
         private void OnEnable()
@@ -190,8 +190,8 @@ namespace DiceRogue
                 if (resultText != null)
                 {
                     resultText.text = runManager.BattleSystem.BattleResult == BattleResultType.Victory
-                        ? "승리했습니다. 보상을 받고 다음 진행으로 넘어갑니다."
-                        : "패배했습니다. 메인 메뉴로 돌아갑니다.";
+                        ? "Victory. Take your reward and continue the run."
+                        : "Defeat. Return to the main menu.";
                 }
 
                 if (continueButton != null)
@@ -225,111 +225,114 @@ namespace DiceRogue
             }
 
             SceneUILayoutHelper.EnsureFullscreenImage(canvas.transform, "RuntimeBattleBackdrop", new Color(0.07f, 0.1f, 0.17f, 1f));
-            SceneUILayoutHelper.EnsurePanel(canvas.transform, "RuntimeBattleTopCard", new Vector2(0.5f, 1f), new Vector2(0.5f, 1f), new Vector2(0.5f, 1f), new Vector2(0f, -120f), new Vector2(980f, 360f), new Color(0.11f, 0.17f, 0.28f, 0.95f));
-            SceneUILayoutHelper.EnsurePanel(canvas.transform, "RuntimeBattleBottomCard", new Vector2(0.5f, 0f), new Vector2(0.5f, 0f), new Vector2(0.5f, 0f), new Vector2(0f, 116f), new Vector2(980f, 270f), new Color(0.12f, 0.18f, 0.3f, 0.94f));
+            SceneUILayoutHelper.EnsurePanel(canvas.transform, "RuntimeBattleTopCard", new Vector2(0.5f, 1f), new Vector2(0.5f, 1f), new Vector2(0.5f, 1f), new Vector2(0f, -140f), new Vector2(980f, 470f), new Color(0.11f, 0.17f, 0.28f, 0.95f));
+            SceneUILayoutHelper.EnsurePanel(canvas.transform, "RuntimeBattleBottomCard", new Vector2(0.5f, 0f), new Vector2(0.5f, 0f), new Vector2(0.5f, 0f), new Vector2(0f, 150f), new Vector2(980f, 360f), new Color(0.12f, 0.18f, 0.3f, 0.94f));
 
+            LayoutHudTexts();
+            LayoutActionControls();
+        }
+
+        private void LayoutHudTexts()
+        {
             var turnText = FindComponentByName<TMP_Text>("TurnText");
+            var actingUnitText = FindComponentByName<TMP_Text>("ActingUnitText");
+            var turnQueueText = FindComponentByName<TMP_Text>("TurnQueueText");
             var playerStatsText = FindComponentByName<TMP_Text>("PlayerStatsText");
             var enemyStatsText = FindComponentByName<TMP_Text>("EnemyStatsText");
-            var playerDiceText = FindComponentByName<TMP_Text>("PlayerDiceText");
+            var rollLogText = FindComponentByName<TMP_Text>("RollLogText");
             var battleLogText = FindComponentByName<TMP_Text>("BattleLogText");
 
             if (turnText != null && turnText.transform is RectTransform turnRect)
             {
-                SceneUILayoutHelper.SetRect(turnRect, new Vector2(0.5f, 1f), new Vector2(0.5f, 1f), new Vector2(0.5f, 1f), new Vector2(0f, -104f), new Vector2(360f, 72f));
+                SceneUILayoutHelper.SetRect(turnRect, new Vector2(0.5f, 1f), new Vector2(0.5f, 1f), new Vector2(0.5f, 1f), new Vector2(0f, -96f), new Vector2(360f, 64f));
                 SceneUILayoutHelper.StyleText(turnText, 34f, TextAlignmentOptions.Center, FontStyles.Bold);
                 turnText.color = Color.white;
             }
 
+            if (actingUnitText != null && actingUnitText.transform is RectTransform actingRect)
+            {
+                SceneUILayoutHelper.SetRect(actingRect, new Vector2(0.5f, 1f), new Vector2(0.5f, 1f), new Vector2(0.5f, 1f), new Vector2(0f, -150f), new Vector2(520f, 50f));
+                SceneUILayoutHelper.StyleText(actingUnitText, 22f, TextAlignmentOptions.Center, FontStyles.Bold);
+                actingUnitText.color = new Color(1f, 0.92f, 0.65f, 1f);
+            }
+
+            if (turnQueueText != null && turnQueueText.transform is RectTransform queueRect)
+            {
+                SceneUILayoutHelper.SetRect(queueRect, new Vector2(0.5f, 1f), new Vector2(0.5f, 1f), new Vector2(0.5f, 1f), new Vector2(0f, -226f), new Vector2(880f, 84f));
+                SceneUILayoutHelper.StyleText(turnQueueText, 17f, TextAlignmentOptions.Center, FontStyles.Bold);
+                turnQueueText.color = new Color(0.84f, 0.9f, 0.98f, 1f);
+            }
+
             if (playerStatsText != null && playerStatsText.transform is RectTransform playerStatsRect)
             {
-                SceneUILayoutHelper.SetRect(playerStatsRect, new Vector2(0f, 0f), new Vector2(0f, 0f), new Vector2(0f, 0f), new Vector2(72f, 300f), new Vector2(370f, 108f));
-                SceneUILayoutHelper.StyleText(playerStatsText, 19f, TextAlignmentOptions.TopLeft, FontStyles.Bold);
+                SceneUILayoutHelper.SetRect(playerStatsRect, new Vector2(0f, 1f), new Vector2(0f, 1f), new Vector2(0f, 1f), new Vector2(72f, -290f), new Vector2(300f, 190f));
+                SceneUILayoutHelper.StyleText(playerStatsText, 18f, TextAlignmentOptions.TopLeft, FontStyles.Bold);
                 playerStatsText.color = Color.white;
             }
 
             if (enemyStatsText != null && enemyStatsText.transform is RectTransform enemyStatsRect)
             {
-                SceneUILayoutHelper.SetRect(enemyStatsRect, new Vector2(1f, 1f), new Vector2(1f, 1f), new Vector2(1f, 1f), new Vector2(-72f, -164f), new Vector2(370f, 108f));
-                SceneUILayoutHelper.StyleText(enemyStatsText, 19f, TextAlignmentOptions.TopRight, FontStyles.Bold);
+                SceneUILayoutHelper.SetRect(enemyStatsRect, new Vector2(1f, 1f), new Vector2(1f, 1f), new Vector2(1f, 1f), new Vector2(-72f, -290f), new Vector2(320f, 210f));
+                SceneUILayoutHelper.StyleText(enemyStatsText, 17f, TextAlignmentOptions.TopRight, FontStyles.Bold);
                 enemyStatsText.color = Color.white;
             }
 
-            if (playerDiceText != null && playerDiceText.transform is RectTransform diceRect)
+            if (rollLogText != null && rollLogText.transform is RectTransform rollRect)
             {
-                SceneUILayoutHelper.SetRect(diceRect, new Vector2(0.5f, 0f), new Vector2(0.5f, 0f), new Vector2(0.5f, 0f), new Vector2(0f, 228f), new Vector2(760f, 110f));
-                SceneUILayoutHelper.StyleText(playerDiceText, 20f, TextAlignmentOptions.Center, FontStyles.Bold);
-                playerDiceText.color = new Color(0.88f, 0.93f, 1f, 1f);
+                SceneUILayoutHelper.SetRect(rollRect, new Vector2(0.5f, 0f), new Vector2(0.5f, 0f), new Vector2(0.5f, 0f), new Vector2(0f, 300f), new Vector2(900f, 90f));
+                SceneUILayoutHelper.StyleText(rollLogText, 18f, TextAlignmentOptions.Center, FontStyles.Bold);
+                rollLogText.color = new Color(0.88f, 0.93f, 1f, 1f);
             }
 
             if (battleLogText != null && battleLogText.transform is RectTransform logRect)
             {
-                SceneUILayoutHelper.SetRect(logRect, new Vector2(0.5f, 1f), new Vector2(0.5f, 1f), new Vector2(0.5f, 1f), new Vector2(0f, -230f), new Vector2(900f, 190f));
-                SceneUILayoutHelper.StyleText(battleLogText, 18f, TextAlignmentOptions.TopLeft);
+                SceneUILayoutHelper.SetRect(logRect, new Vector2(0.5f, 0f), new Vector2(0.5f, 0f), new Vector2(0.5f, 0f), new Vector2(0f, 172f), new Vector2(900f, 170f));
+                SceneUILayoutHelper.StyleText(battleLogText, 16f, TextAlignmentOptions.TopLeft);
                 battleLogText.color = new Color(0.86f, 0.92f, 0.98f, 1f);
             }
+        }
 
-            if (rollButton != null && rollButton.transform is RectTransform rollRect)
+        private void LayoutActionControls()
+        {
+            if (rollButton != null && rollButton.transform is RectTransform manualRect)
             {
-                SceneUILayoutHelper.SetRect(rollRect, new Vector2(0.5f, 0f), new Vector2(0.5f, 0f), new Vector2(0.5f, 0f), new Vector2(0f, 82f), new Vector2(320f, 104f));
-                SceneUILayoutHelper.StyleButton(rollButton, new Vector2(320f, 104f), 26f, new Color(0.17f, 0.55f, 0.98f), Color.white);
+                SceneUILayoutHelper.SetRect(manualRect, new Vector2(0.5f, 0f), new Vector2(0.5f, 0f), new Vector2(0.5f, 0f), new Vector2(0f, 72f), new Vector2(340f, 96f));
+                SceneUILayoutHelper.StyleButton(rollButton, new Vector2(340f, 96f), 24f, new Color(0.17f, 0.55f, 0.98f), Color.white);
             }
 
             if (backToMenuButton != null && backToMenuButton.transform is RectTransform backRect)
             {
-                SceneUILayoutHelper.SetRect(backRect, new Vector2(0f, 0f), new Vector2(0f, 0f), new Vector2(0f, 0f), new Vector2(56f, 82f), new Vector2(280f, 104f));
-                SceneUILayoutHelper.StyleButton(backToMenuButton, new Vector2(280f, 104f), 24f, new Color(0.2f, 0.24f, 0.34f), Color.white);
+                SceneUILayoutHelper.SetRect(backRect, new Vector2(0f, 0f), new Vector2(0f, 0f), new Vector2(0f, 0f), new Vector2(56f, 72f), new Vector2(260f, 96f));
+                SceneUILayoutHelper.StyleButton(backToMenuButton, new Vector2(260f, 96f), 22f, new Color(0.2f, 0.24f, 0.34f), Color.white);
             }
 
             if (continueButton != null && continueButton.transform is RectTransform continueRect)
             {
-                SceneUILayoutHelper.SetRect(continueRect, new Vector2(0.5f, 0f), new Vector2(0.5f, 0f), new Vector2(0.5f, 0f), new Vector2(0f, 82f), new Vector2(340f, 104f));
-                SceneUILayoutHelper.StyleButton(continueButton, new Vector2(340f, 104f), 24f, new Color(0.22f, 0.72f, 0.42f), Color.white);
+                SceneUILayoutHelper.SetRect(continueRect, new Vector2(0.5f, 0f), new Vector2(0.5f, 0f), new Vector2(0.5f, 0f), new Vector2(0f, 72f), new Vector2(360f, 96f));
+                SceneUILayoutHelper.StyleButton(continueButton, new Vector2(360f, 96f), 24f, new Color(0.22f, 0.72f, 0.42f), Color.white);
             }
 
             if (autoBattleToggle != null && autoBattleToggle.transform is RectTransform toggleRect)
             {
-                SceneUILayoutHelper.SetRect(toggleRect, new Vector2(1f, 0f), new Vector2(1f, 0f), new Vector2(1f, 0f), new Vector2(-40f, 208f), new Vector2(360f, 90f));
-
+                SceneUILayoutHelper.SetRect(toggleRect, new Vector2(1f, 0f), new Vector2(1f, 0f), new Vector2(1f, 0f), new Vector2(-40f, 190f), new Vector2(360f, 84f));
                 if (autoBattleToggle.targetGraphic is Image toggleBackground)
                 {
                     toggleBackground.color = new Color(0.16f, 0.22f, 0.34f, 0.96f);
                 }
 
-                if (autoBattleToggle.transform.Find("Background") is RectTransform backgroundRect)
-                {
-                    SceneUILayoutHelper.SetRect(backgroundRect, new Vector2(0f, 0.5f), new Vector2(0f, 0.5f), new Vector2(0f, 0.5f), new Vector2(18f, 0f), new Vector2(44f, 44f));
-                }
-
-                if (autoBattleToggle.graphic != null && autoBattleToggle.graphic.transform is RectTransform checkmarkRect)
-                {
-                    SceneUILayoutHelper.Stretch(checkmarkRect, 6f, 6f, 6f, 6f);
-                    if (autoBattleToggle.graphic is Image checkmarkImage)
-                    {
-                        checkmarkImage.color = new Color(0.35f, 0.95f, 0.55f, 1f);
-                    }
-                }
-
                 var toggleLabel = autoBattleToggle.GetComponentInChildren<TMP_Text>(true);
-                if (toggleLabel != null && toggleLabel.transform is RectTransform labelRect)
+                if (toggleLabel != null)
                 {
-                    labelRect.anchorMin = Vector2.zero;
-                    labelRect.anchorMax = Vector2.one;
-                    labelRect.pivot = new Vector2(0.5f, 0.5f);
-                    labelRect.offsetMin = new Vector2(76f, 0f);
-                    labelRect.offsetMax = new Vector2(-12f, 0f);
-                    labelRect.localScale = Vector3.one;
-                    labelRect.localRotation = Quaternion.identity;
-                    SceneUILayoutHelper.StyleText(toggleLabel, 24f, TextAlignmentOptions.MidlineLeft, FontStyles.Bold);
+                    SceneUILayoutHelper.StyleText(toggleLabel, 22f, TextAlignmentOptions.MidlineLeft, FontStyles.Bold);
                     toggleLabel.color = Color.white;
-                    toggleLabel.text = "자동 전투";
+                    toggleLabel.text = "Auto Battle";
                 }
             }
 
             if (resultText != null && resultText.transform is RectTransform resultRect)
             {
                 SceneUILayoutHelper.SetRect(resultRect, new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(0f, 180f), new Vector2(860f, 220f));
-                SceneUILayoutHelper.StyleText(resultText, 40f, TextAlignmentOptions.Center, FontStyles.Bold);
+                SceneUILayoutHelper.StyleText(resultText, 36f, TextAlignmentOptions.Center, FontStyles.Bold);
                 resultText.color = Color.white;
             }
         }
@@ -359,38 +362,50 @@ namespace DiceRogue
             StretchRect(runtimeRoot);
 
             var turnText = FindComponentByName<TMP_Text>("TurnText");
+            var actingUnitText = FindComponentByName<TMP_Text>("ActingUnitText");
+            var turnQueueText = FindComponentByName<TMP_Text>("TurnQueueText");
             var playerStatsText = FindComponentByName<TMP_Text>("PlayerStatsText");
             var enemyStatsText = FindComponentByName<TMP_Text>("EnemyStatsText");
-            var currentDiceResultText = FindComponentByName<TMP_Text>("PlayerDiceText");
+            var rollLogText = FindComponentByName<TMP_Text>("RollLogText");
             var summaryText = FindComponentByName<TMP_Text>("BattleLogText");
             var sampleText = turnText != null ? turnText : FindFirstSceneText();
 
             if (turnText == null)
             {
-                turnText = CreateRuntimeText(runtimeRoot, "RuntimeTurnText", sampleText, "턴 1", 30f, FontStyles.Bold, TextAlignmentOptions.Center, new Vector2(0f, 860f), new Vector2(320f, 54f));
+                turnText = CreateRuntimeText(runtimeRoot, "TurnText", sampleText, "Turn 1", 30f, FontStyles.Bold, TextAlignmentOptions.Center, new Vector2(0f, 860f), new Vector2(320f, 54f));
+            }
+
+            if (actingUnitText == null)
+            {
+                actingUnitText = CreateRuntimeText(runtimeRoot, "ActingUnitText", sampleText, "Acting: Waiting", 20f, FontStyles.Bold, TextAlignmentOptions.Center, new Vector2(0f, 800f), new Vector2(520f, 50f));
+            }
+
+            if (turnQueueText == null)
+            {
+                turnQueueText = CreateRuntimeText(runtimeRoot, "TurnQueueText", sampleText, "Turn Queue", 16f, FontStyles.Bold, TextAlignmentOptions.Center, new Vector2(0f, 734f), new Vector2(900f, 84f));
             }
 
             if (playerStatsText == null)
             {
-                playerStatsText = CreateRuntimeText(runtimeRoot, "RuntimePlayerStatsText", sampleText, "플레이어", 26f, FontStyles.Normal, TextAlignmentOptions.Center, new Vector2(-250f, -760f), new Vector2(420f, 120f));
+                playerStatsText = CreateRuntimeText(runtimeRoot, "PlayerStatsText", sampleText, "Player", 18f, FontStyles.Bold, TextAlignmentOptions.TopLeft, new Vector2(-280f, 640f), new Vector2(300f, 190f));
             }
 
             if (enemyStatsText == null)
             {
-                enemyStatsText = CreateRuntimeText(runtimeRoot, "RuntimeEnemyStatsText", sampleText, "적", 26f, FontStyles.Normal, TextAlignmentOptions.Center, new Vector2(250f, 760f), new Vector2(420f, 120f));
+                enemyStatsText = CreateRuntimeText(runtimeRoot, "EnemyStatsText", sampleText, "Enemies", 18f, FontStyles.Bold, TextAlignmentOptions.TopRight, new Vector2(280f, 640f), new Vector2(320f, 210f));
             }
 
-            if (currentDiceResultText == null)
+            if (rollLogText == null)
             {
-                currentDiceResultText = CreateRuntimeText(runtimeRoot, "RuntimeDiceResultText", sampleText, "이번 턴 주사위 결과", 24f, FontStyles.Normal, TextAlignmentOptions.Center, new Vector2(0f, -530f), new Vector2(520f, 120f));
+                rollLogText = CreateRuntimeText(runtimeRoot, "RollLogText", sampleText, "Roll Log", 18f, FontStyles.Bold, TextAlignmentOptions.Center, new Vector2(0f, -620f), new Vector2(900f, 90f));
             }
 
             if (summaryText == null)
             {
-                summaryText = CreateRuntimeText(runtimeRoot, "RuntimeBattleLogText", sampleText, "전투 로그", 24f, FontStyles.Normal, TextAlignmentOptions.TopLeft, new Vector2(0f, 520f), new Vector2(760f, 260f));
+                summaryText = CreateRuntimeText(runtimeRoot, "BattleLogText", sampleText, "Battle Log", 16f, FontStyles.Normal, TextAlignmentOptions.TopLeft, new Vector2(0f, -758f), new Vector2(900f, 170f));
             }
 
-            hud.Configure(turnText, playerStatsText, enemyStatsText, currentDiceResultText, summaryText);
+            hud.Configure(turnText, actingUnitText, turnQueueText, playerStatsText, enemyStatsText, rollLogText, summaryText);
             return hud;
         }
 
@@ -408,10 +423,10 @@ namespace DiceRogue
             StretchRect(unitsRoot);
 
             var sampleText = FindFirstSceneText();
-            var playerView = CreateRuntimeUnitView(unitsRoot, "RuntimePlayerUnitView", new Vector2(-220f, -220f), sampleText);
-            var enemyView01 = CreateRuntimeUnitView(unitsRoot, "RuntimeEnemyUnitView01", new Vector2(220f, 170f), sampleText);
-            var enemyView02 = CreateRuntimeUnitView(unitsRoot, "RuntimeEnemyUnitView02", new Vector2(380f, 270f), sampleText);
-            var enemyView03 = CreateRuntimeUnitView(unitsRoot, "RuntimeEnemyUnitView03", new Vector2(380f, 120f), sampleText);
+            var playerView = CreateRuntimeUnitView(unitsRoot, "RuntimePlayerUnitView", new Vector2(-230f, -120f), sampleText);
+            var enemyView01 = CreateRuntimeUnitView(unitsRoot, "RuntimeEnemyUnitView01", new Vector2(220f, 70f), sampleText);
+            var enemyView02 = CreateRuntimeUnitView(unitsRoot, "RuntimeEnemyUnitView02", new Vector2(390f, 170f), sampleText);
+            var enemyView03 = CreateRuntimeUnitView(unitsRoot, "RuntimeEnemyUnitView03", new Vector2(390f, 10f), sampleText);
             enemyView02.gameObject.SetActive(false);
             enemyView03.gameObject.SetActive(false);
 
@@ -453,8 +468,8 @@ namespace DiceRogue
             var nameText = CreateRuntimeText(root, "NameText", sampleText, objectName, 28f, FontStyles.Bold, TextAlignmentOptions.Center, new Vector2(0f, 180f), new Vector2(240f, 38f));
             var hpBar = CreateRuntimeSlider(root, "HpBar", new Vector2(0f, -74f), new Vector2(220f, 18f));
             var hpText = CreateRuntimeText(root, "HpText", sampleText, "HP 0/0", 20f, FontStyles.Normal, TextAlignmentOptions.Center, new Vector2(0f, -102f), new Vector2(240f, 28f));
-            var shieldArmorText = CreateRuntimeText(root, "ShieldArmorText", sampleText, "방어도 0 / 방어력 0", 18f, FontStyles.Normal, TextAlignmentOptions.Center, new Vector2(0f, -132f), new Vector2(260f, 28f));
-            var rageText = CreateRuntimeText(root, "RageText", sampleText, "분노 0", 18f, FontStyles.Normal, TextAlignmentOptions.Center, new Vector2(0f, -160f), new Vector2(220f, 28f));
+            var shieldArmorText = CreateRuntimeText(root, "ShieldArmorText", sampleText, "Shield 0 / Armor 0", 18f, FontStyles.Normal, TextAlignmentOptions.Center, new Vector2(0f, -132f), new Vector2(260f, 28f));
+            var rageText = CreateRuntimeText(root, "RageText", sampleText, "Rage 0", 18f, FontStyles.Normal, TextAlignmentOptions.Center, new Vector2(0f, -160f), new Vector2(220f, 28f));
 
             unitView.ConfigureRuntime(root, popupAnchor, canvasGroup, spriteImage, highlightImage, hpBar, nameText, hpText, shieldArmorText, rageText);
             return unitView;
@@ -664,11 +679,7 @@ namespace DiceRogue
                 });
                 texture.Apply();
 
-                cachedUiSprite = Sprite.Create(
-                    texture,
-                    new Rect(0f, 0f, texture.width, texture.height),
-                    new Vector2(0.5f, 0.5f),
-                    100f);
+                cachedUiSprite = Sprite.Create(texture, new Rect(0f, 0f, texture.width, texture.height), new Vector2(0.5f, 0.5f), 100f);
                 cachedUiSprite.name = "RuntimeWhiteUiSprite";
                 cachedUiSprite.hideFlags = HideFlags.HideAndDontSave;
             }

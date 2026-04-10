@@ -18,10 +18,20 @@ namespace DiceRogue
                 return null;
             }
 
-            var index = random.Next(0, combatant.DiceFaces.Count);
+            var index = NextIndex(combatant.DiceFaces.Count);
             var face = combatant.DiceFaces[index];
             combatant.SetLastRolledFace(face);
             return face;
+        }
+
+        public int NextIndex(int count)
+        {
+            if (count <= 0)
+            {
+                return 0;
+            }
+
+            return random.Next(0, count);
         }
     }
 }

@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using System.Linq;
 using UnityEngine;
 
 namespace DiceRogue
@@ -16,21 +17,85 @@ namespace DiceRogue
             return BuildRuntimeConfig(config);
         }
 
+        public static SkillDatabase CreatePrototypeSkillDatabase(RunConfig config)
+        {
+            var database = ScriptableObject.CreateInstance<SkillDatabase>();
+            var playerSkills = config != null ? config.SkillLibrary : new List<SkillDefinition>();
+            var enemySkills = new List<SkillDefinition>();
+
+            if (config != null)
+            {
+                foreach (var enemy in config.NormalEnemies)
+                {
+                    if (enemy == null)
+                    {
+                        continue;
+                    }
+
+                    enemySkills.AddRange(enemy.DiceSkills);
+                }
+
+                if (config.BossEnemy != null)
+                {
+                    enemySkills.AddRange(config.BossEnemy.DiceSkills);
+                }
+            }
+
+            database.Configure(playerSkills, enemySkills);
+            return database;
+        }
+
+        public static List<DiceLoadoutDefinition> CreatePrototypePlayerLoadouts(RunConfig config)
+        {
+            var loadouts = new List<DiceLoadoutDefinition>();
+            var starterLoadout = config?.PlayerTemplate != null ? config.PlayerTemplate.DiceLoadout : null;
+            if (starterLoadout != null)
+            {
+                loadouts.Add(starterLoadout);
+            }
+
+            var defensiveLoadout = CreateLoadout(
+                "defensive_preset",
+                "Defensive Preset",
+                DiceBuildIdentity.Defensive,
+                FindSkill(config?.SkillLibrary, "defensive_stance"),
+                FindSkill(config?.SkillLibrary, "focused_defense"),
+                FindSkill(config?.SkillLibrary, "defensive_stance"),
+                FindSkill(config?.SkillLibrary, "counter"),
+                FindSkill(config?.SkillLibrary, "shield_burst"),
+                FindSkill(config?.SkillLibrary, "basic_attack"));
+
+            var berserkerLoadout = CreateLoadout(
+                "berserker_preset",
+                "Berserker Preset",
+                DiceBuildIdentity.Berserker,
+                FindSkill(config?.SkillLibrary, "blood_slash"),
+                FindSkill(config?.SkillLibrary, "fury"),
+                FindSkill(config?.SkillLibrary, "savage_strike"),
+                FindSkill(config?.SkillLibrary, "vampiric_slash"),
+                FindSkill(config?.SkillLibrary, "blood_slash"),
+                FindSkill(config?.SkillLibrary, "basic_attack"));
+
+            loadouts.Add(defensiveLoadout);
+            loadouts.Add(berserkerLoadout);
+            return loadouts.Where(loadout => loadout != null).Distinct().ToList();
+        }
+
         public static RunConfig BuildRuntimeConfig(RunConfig sourceConfig = null)
         {
             var basicAttack = CreateSkill(
                 "basic_attack",
-                "기본 공격",
+                "Basic Attack",
                 SkillActionType.Attack,
                 SkillTargetType.RandomEnemy,
                 attackAmount: 6,
                 attackUpgradeAmount: 3,
                 colorHex: "#F59F00",
-                description: "기본 공격 6, 강화 시 9.");
+                description: "Deal 6 damage. Upgrade: 9 damage.");
 
-            var guardStance = CreateSkill(
-                "guard_stance",
-                "수비 태세",
+            var defensiveStance = CreateSkill(
+                "defensive_stance",
+                "Defensive Stance",
                 SkillActionType.Defense,
                 SkillTargetType.Self,
                 shieldAmount: 10,
@@ -38,11 +103,11 @@ namespace DiceRogue
                 armorAmount: 3,
                 armorUpgradeAmount: 2,
                 colorHex: "#339AF0",
-                description: "방어도와 방어력을 함께 올립니다.");
+                description: "Shield +10 and Armor +3. Upgrade: Shield +14 and Armor +5.");
 
             var focusedDefense = CreateSkill(
                 "focused_defense",
-                "집중 방어",
+                "Focus Defense",
                 SkillActionType.Defense,
                 SkillTargetType.Self,
                 shieldAmount: 8,
@@ -50,32 +115,32 @@ namespace DiceRogue
                 nextTurnShieldAmount: 8,
                 nextTurnShieldUpgradeAmount: 3,
                 colorHex: "#74C0FC",
-                description: "이번 턴과 다음 턴 방어도를 확보합니다.");
+                description: "Shield +8 and next turn Shield +8. Upgrade: +11 / +11.");
 
             var counter = CreateSkill(
                 "counter",
-                "반격",
+                "Counter",
                 SkillActionType.Attack,
                 SkillTargetType.RandomEnemy,
                 shieldDamagePercent: 50,
                 shieldDamageUpgradePercent: 20,
                 colorHex: "#FFB300",
-                description: "현재 방어도에 비례한 피해를 줍니다.");
+                description: "Deal damage equal to 50% of current Shield. Upgrade: 70%.");
 
             var shieldBurst = CreateSkill(
                 "shield_burst",
-                "방패 폭발",
+                "Shield Burst",
                 SkillActionType.Attack,
                 SkillTargetType.AllEnemies,
                 shieldDamagePercent: 60,
                 shieldDamageUpgradePercent: 25,
                 consumeAllShield: true,
                 colorHex: "#90E0EF",
-                description: "방어도를 모두 소모해 큰 피해를 줍니다.");
+                description: "Remove all current Shield and deal 60% of it to all enemies. Upgrade: 85%.");
 
             var bloodSlash = CreateSkill(
                 "blood_slash",
-                "혈기 베기",
+                "Blood Slash",
                 SkillActionType.Attack,
                 SkillTargetType.RandomEnemy,
                 attackAmount: 8,
@@ -85,198 +150,240 @@ namespace DiceRogue
                 rageGainAmount: 2,
                 rageGainUpgradeAmount: 1,
                 colorHex: "#FA5252",
-                description: "체력을 깎아 분노를 얻는 공격입니다.");
+                description: "Deal 8 damage, lose 4 HP, gain 2 Rage. Upgrade: 11 damage, 5 self damage, 3 Rage.");
 
             var fury = CreateSkill(
                 "fury",
-                "격노",
+                "Fury",
                 SkillActionType.Buff,
                 SkillTargetType.Self,
                 rageGainAmount: 5,
                 rageGainUpgradeAmount: 2,
                 colorHex: "#F76707",
-                description: "분노를 크게 얻습니다.");
+                description: "Gain 5 Rage. Upgrade: 7 Rage.");
 
-            var ragingStrike = CreateSkill(
-                "raging_strike",
-                "광폭 일격",
+            var savageStrike = CreateSkill(
+                "savage_strike",
+                "Savage Strike",
                 SkillActionType.Attack,
-                SkillTargetType.HighestHpEnemy,
+                SkillTargetType.HighHpEnemy,
                 attackAmount: 12,
                 attackUpgradeAmount: 10,
                 rageCostAmount: 5,
                 rageCostReductionPerUpgrade: 1,
                 colorHex: "#FF6B6B",
-                description: "분노를 소모해 강하게 내려칩니다.");
+                description: "Deal 12 + Rage damage and spend 5 Rage. Upgrade: 22 damage and spend 4 Rage.");
 
-            var vampiricStrike = CreateSkill(
-                "vampiric_strike",
-                "흡혈 베기",
+            var vampiricSlash = CreateSkill(
+                "vampiric_slash",
+                "Vampiric Slash",
                 SkillActionType.Attack,
-                SkillTargetType.HighestHpEnemy,
+                SkillTargetType.HighHpEnemy,
                 attackAmount: 8,
                 attackUpgradeAmount: 3,
                 lifestealPercent: 50,
                 lifestealUpgradePercent: 20,
                 colorHex: "#E64980",
-                description: "피해의 일부를 체력으로 회복합니다.");
+                description: "Deal 8 damage and heal 50% of dealt damage. Upgrade: 11 damage and heal 70%.");
 
             var slimeAttack4 = CreateSkill(
                 "slime_attack_4",
-                "점액 타격",
+                "Slime Jab",
                 SkillActionType.Attack,
                 SkillTargetType.RandomEnemy,
                 attackAmount: 4,
                 colorHex: "#69DB7C",
-                description: "슬라임의 기본 공격입니다.");
+                description: "Deal 4 damage.");
 
             var slimeAttack5 = CreateSkill(
                 "slime_attack_5",
-                "강한 점액",
+                "Slime Slam",
                 SkillActionType.Attack,
                 SkillTargetType.RandomEnemy,
                 attackAmount: 5,
                 colorHex: "#51CF66",
-                description: "조금 더 강한 슬라임 공격입니다.");
+                description: "Deal 5 damage.");
 
             var slimeGuard = CreateSkill(
                 "slime_guard",
-                "점액 보호막",
+                "Slime Guard",
                 SkillActionType.Defense,
                 SkillTargetType.Self,
                 shieldAmount: 6,
                 colorHex: "#74C69D",
-                description: "슬라임이 몸을 굳혀 방어합니다.");
+                description: "Gain 6 Shield.");
 
             var slimeBind = CreateSkill(
                 "slime_bind",
-                "구속",
+                "Bind",
                 SkillActionType.Debuff,
                 SkillTargetType.RandomEnemy,
                 dicePointModifierAmount: -1,
                 colorHex: "#38D9A9",
-                description: "다음 턴 상대 DP를 감소시킵니다.");
+                description: "Apply DP -1 next turn.");
 
             var goblinAttack5 = CreateSkill(
                 "goblin_attack_5",
-                "단검 찌르기",
+                "Goblin Stab",
                 SkillActionType.Attack,
                 SkillTargetType.RandomEnemy,
                 attackAmount: 5,
                 colorHex: "#FCC419",
-                description: "고블린의 날카로운 공격입니다.");
+                description: "Deal 5 damage.");
 
             var goblinAttack6 = CreateSkill(
                 "goblin_attack_6",
-                "기습 베기",
+                "Goblin Rush",
                 SkillActionType.Attack,
                 SkillTargetType.RandomEnemy,
                 attackAmount: 6,
                 colorHex: "#FAB005",
-                description: "고블린의 강한 일격입니다.");
+                description: "Deal 6 damage.");
 
             var goblinDoubleStrike = CreateSkill(
                 "goblin_double_strike",
-                "연속 공격",
+                "Double Attack",
+                SkillActionType.Attack,
+                SkillTargetType.RandomEnemy,
+                attackAmount: 4,
+                repeatCount: 2,
+                colorHex: "#FD7E14",
+                description: "Deal 4 damage twice.");
+
+            var goblinDefense = CreateSkill(
+                "goblin_defense",
+                "Goblin Guard",
+                SkillActionType.Defense,
+                SkillTargetType.Self,
+                shieldAmount: 6,
+                colorHex: "#9775FA",
+                description: "Gain 6 Shield.");
+
+            var golemDefense = CreateSkill(
+                "golem_defense",
+                "Stone Guard",
+                SkillActionType.Defense,
+                SkillTargetType.Self,
+                shieldAmount: 10,
+                colorHex: "#A5D8FF",
+                description: "Gain 10 Shield.");
+
+            var golemArmorUp = CreateSkill(
+                "golem_armor_up",
+                "Armor Up",
+                SkillActionType.Defense,
+                SkillTargetType.Self,
+                armorAmount: 5,
+                colorHex: "#DEE2E6",
+                description: "Gain 5 Armor.");
+
+            var golemAttack = CreateSkill(
+                "golem_attack",
+                "Stone Punch",
+                SkillActionType.Attack,
+                SkillTargetType.RandomEnemy,
+                attackAmount: 8,
+                colorHex: "#868E96",
+                description: "Deal 8 damage.");
+
+            var summonedGoblinAttack = CreateSkill(
+                "summoned_goblin_attack",
+                "Summoned Stab",
+                SkillActionType.Attack,
+                SkillTargetType.RandomEnemy,
+                attackAmount: 5,
+                colorHex: "#F59F00",
+                description: "Deal 5 damage.");
+
+            var summonedGoblinDoubleAttack = CreateSkill(
+                "summoned_goblin_double_attack",
+                "Summoned Double",
                 SkillActionType.Attack,
                 SkillTargetType.RandomEnemy,
                 attackAmount: 3,
                 repeatCount: 2,
-                colorHex: "#FD7E14",
-                description: "4 피해를 2회 가합니다.");
+                colorHex: "#FF922B",
+                description: "Deal 3 damage twice.");
 
-            var goblinDefense = CreateSkill(
-                "goblin_defense",
-                "재빠른 수비",
-                SkillActionType.Defense,
-                SkillTargetType.Self,
-                shieldAmount: 4,
-                colorHex: "#9775FA",
-                description: "간단한 방어 자세를 취합니다.");
-
-            var golemDefense = CreateSkill(
-                "golem_defense",
-                "암석 방패",
-                SkillActionType.Defense,
-                SkillTargetType.Self,
-                shieldAmount: 6,
-                colorHex: "#A5D8FF",
-                description: "골렘이 단단한 방어막을 세웁니다.");
-
-            var golemArmorUp = CreateSkill(
-                "golem_armor_up",
-                "장갑 강화",
-                SkillActionType.Defense,
-                SkillTargetType.Self,
-                armorAmount: 3,
-                colorHex: "#DEE2E6",
-                description: "이번 턴 방어력을 높입니다.");
-
-            var golemAttack = CreateSkill(
-                "golem_attack",
-                "바위 강타",
-                SkillActionType.Attack,
-                SkillTargetType.RandomEnemy,
-                attackAmount: 7,
-                colorHex: "#868E96",
-                description: "무거운 바위 주먹으로 공격합니다.");
+            var summonedGoblin = CreateCombatant(
+                "summoned_goblin",
+                "Summoned Goblin",
+                11,
+                1,
+                0,
+                false,
+                0,
+                summonedGoblinAttack,
+                summonedGoblinAttack,
+                summonedGoblinAttack,
+                summonedGoblinAttack,
+                summonedGoblinDoubleAttack,
+                summonedGoblinDoubleAttack);
 
             var shamanAttack = CreateSkill(
                 "shaman_attack",
-                "저주 화살",
+                "Hex Bolt",
                 SkillActionType.Attack,
                 SkillTargetType.RandomEnemy,
                 attackAmount: 7,
                 colorHex: "#AE3EC9",
-                description: "주술사의 기본 공격입니다.");
+                description: "Deal 7 damage.");
 
             var shamanWeaken = CreateSkill(
                 "shaman_weaken",
-                "약화 저주",
+                "Weaken",
                 SkillActionType.Debuff,
                 SkillTargetType.RandomEnemy,
                 attackModifierAmount: -3,
                 colorHex: "#C2255C",
-                description: "다음 턴 상대 공격력을 감소시킵니다.");
+                description: "Apply Attack -3 next turn.");
 
-            var shamanCurse = CreateSkill(
-                "shaman_curse",
-                "속박 저주",
-                SkillActionType.Debuff,
-                SkillTargetType.RandomEnemy,
-                dicePointModifierAmount: -1,
-                attackModifierAmount: -1,
-                colorHex: "#9C36B5",
-                description: "다음 턴 DP와 공격을 함께 낮춥니다.");
-
-            var shamanFury = CreateSkill(
-                "shaman_fury",
-                "주술 분노",
+            var shamanSummonGoblin = CreateSkill(
+                "shaman_summon_goblin",
+                "Summon Goblin",
                 SkillActionType.Buff,
                 SkillTargetType.Self,
-                rageGainAmount: 4,
+                summonTemplate: summonedGoblin,
+                summonCount: 1,
+                maxSummonedAllies: 2,
+                colorHex: "#845EF7",
+                description: "Summon 1 goblin. Maximum 2 summoned goblins.");
+
+            var shamanAttackAura = CreateSkill(
+                "shaman_attack_aura",
+                "Attack Aura",
+                SkillActionType.Buff,
+                SkillTargetType.Self,
+                summonedAllyAttackBonusAmount: 3,
                 colorHex: "#D9480F",
-                description: "분노를 끌어올려 공격을 준비합니다.");
+                description: "Summoned goblins gain +3 attack.");
+
+            var starterLoadout = CreateLoadout(
+                "balanced_starter",
+                "Balanced Starter",
+                DiceBuildIdentity.Balanced,
+                basicAttack,
+                defensiveStance,
+                basicAttack,
+                focusedDefense,
+                counter,
+                fury);
 
             var player = CreateCombatant(
                 "player_knight",
-                "주사위 기사",
+                "Dice Knight",
                 100,
                 2,
                 0,
                 false,
                 0,
-                basicAttack,
-                guardStance,
-                basicAttack,
-                guardStance,
-                basicAttack,
-                guardStance);
+                starterLoadout,
+                starterLoadout.Faces.ToArray());
 
             var slime = CreateCombatant(
                 "slime",
-                "슬라임",
-                15,
+                "Slime",
+                14,
                 1,
                 0,
                 false,
@@ -290,8 +397,8 @@ namespace DiceRogue
 
             var goblin = CreateCombatant(
                 "goblin",
-                "고블린",
-                14,
+                "Goblin",
+                16,
                 1,
                 0,
                 false,
@@ -305,12 +412,12 @@ namespace DiceRogue
 
             var golem = CreateCombatant(
                 "golem",
-                "골렘",
-                42,
-                1,
-                5,
-                false,
+                "Golem",
+                60,
+                2,
                 10,
+                false,
+                30,
                 golemDefense,
                 golemDefense,
                 golemArmorUp,
@@ -320,7 +427,7 @@ namespace DiceRogue
 
             var shaman = CreateCombatant(
                 "shaman",
-                "주술사",
+                "Shaman",
                 80,
                 2,
                 0,
@@ -329,9 +436,15 @@ namespace DiceRogue
                 shamanAttack,
                 shamanWeaken,
                 shamanWeaken,
-                shamanCurse,
-                shamanFury,
-                shamanAttack);
+                shamanSummonGoblin,
+                shamanSummonGoblin,
+                shamanAttackAura);
+
+            var slimeSingleEncounter = CreateEncounter("encounter_slime_single", "Slime Pressure", false, slime);
+            var slimePairEncounter = CreateEncounter("encounter_slime_pair", "Slime Swarm", false, slime, slime);
+            var goblinRaidEncounter = CreateEncounter("encounter_goblin_raid", "Goblin Raiders", false, goblin, goblin);
+            var golemWatchEncounter = CreateEncounter("encounter_golem_watch", "Stone Sentinel", false, golem);
+            var shamanBossEncounter = CreateEncounter("encounter_shaman_boss", "Ritual Chamber", true, shaman);
 
             var config = ScriptableObject.CreateInstance<RunConfig>();
             SetPrivateField(config, "bootSceneName", sourceConfig != null ? sourceConfig.BootSceneName : "Boot");
@@ -343,23 +456,35 @@ namespace DiceRogue
             SetPrivateField(config, "skillLibrary", new List<SkillDefinition>
             {
                 basicAttack,
-                guardStance,
+                defensiveStance,
                 focusedDefense,
                 counter,
                 shieldBurst,
                 bloodSlash,
                 fury,
-                ragingStrike,
-                vampiricStrike
+                savageStrike,
+                vampiricSlash
             });
-            SetPrivateField(config, "normalEnemies", new List<CombatantTemplate> { slime, goblin, golem });
+            SetPrivateField(config, "normalEnemies", new List<CombatantTemplate> { slime, goblin, golem, summonedGoblin });
             SetPrivateField(config, "bossEnemy", shaman);
+            SetPrivateField(config, "encounterTable", new List<EncounterDefinition>
+            {
+                slimeSingleEncounter,
+                slimePairEncounter,
+                goblinRaidEncounter,
+                golemWatchEncounter,
+                shamanBossEncounter
+            });
             SetPrivateField(config, "mapNodes", new List<MapNodeDefinition>
             {
-                CreateNode("node_a", "슬라임 늪", MapNodeType.Battle, slime, 1),
-                CreateNode("node_b", "고블린 야영지", MapNodeType.Battle, goblin, 2),
-                CreateNode("node_c", "암석 전당", MapNodeType.Battle, golem, 3),
-                CreateNode("node_d", "의식의 방", MapNodeType.Boss, shaman)
+                CreateNode("node_a", "Dungeon Gate", MapNodeType.Battle, slimePairEncounter, 1, 2),
+                CreateNode("node_b", "Treasure Vault", MapNodeType.Reward, (CombatantTemplate)null, 3),
+                CreateNode("node_c", "Goblin Camp", MapNodeType.Battle, goblinRaidEncounter, 3),
+                CreateNode("node_d", "Forge Shop", MapNodeType.Shop, (CombatantTemplate)null, 4, 5),
+                CreateNode("node_e", "Stone Hall", MapNodeType.EliteBattle, golemWatchEncounter, 6),
+                CreateNode("node_f", "Forgotten Reliquary", MapNodeType.Reward, (CombatantTemplate)null, 6),
+                CreateNode("node_g", "Slime Bog", MapNodeType.Battle, slimeSingleEncounter, 7),
+                CreateNode("node_h", "Ritual Chamber", MapNodeType.Boss, shamanBossEncounter)
             });
             SetPrivateField(config, "autoTurnDelay", 0.65f);
             SetPrivateField(config, "maxBattleTurns", 0);
@@ -397,6 +522,10 @@ namespace DiceRogue
             int repeatCountUpgradeAmount = 0,
             int bonusDicePointsOnFirstRoll = 0,
             int bonusDicePointsUpgradeAmount = 0,
+            CombatantTemplate summonTemplate = null,
+            int summonCount = 0,
+            int maxSummonedAllies = 0,
+            int summonedAllyAttackBonusAmount = 0,
             bool consumeAllShield = false,
             string colorHex = "#FFFFFF",
             string description = "")
@@ -434,9 +563,37 @@ namespace DiceRogue
             SetPrivateField(definition, "repeatCountUpgradeAmount", repeatCountUpgradeAmount);
             SetPrivateField(definition, "bonusDicePointsOnFirstRoll", bonusDicePointsOnFirstRoll);
             SetPrivateField(definition, "bonusDicePointsUpgradeAmount", bonusDicePointsUpgradeAmount);
+            SetPrivateField(definition, "summonTemplate", summonTemplate);
+            SetPrivateField(definition, "summonCount", summonCount);
+            SetPrivateField(definition, "maxSummonedAllies", maxSummonedAllies);
+            SetPrivateField(definition, "summonedAllyAttackBonusAmount", summonedAllyAttackBonusAmount);
             SetPrivateField(definition, "consumeAllShield", consumeAllShield);
             SetPrivateField(definition, "accentColor", color);
             SetPrivateField(definition, "description", description);
+            return definition;
+        }
+
+        private static CombatantTemplate CreateCombatant(
+            string id,
+            string displayName,
+            int maxHp,
+            int baseDicePoints,
+            int passiveShieldPerTurn,
+            bool isBoss,
+            int passiveReflectPercent,
+            DiceLoadoutDefinition loadout,
+            params SkillDefinition[] diceSkills)
+        {
+            var definition = CreateCombatant(
+                id,
+                displayName,
+                maxHp,
+                baseDicePoints,
+                passiveShieldPerTurn,
+                isBoss,
+                passiveReflectPercent,
+                diceSkills);
+            SetPrivateField(definition, "diceLoadout", loadout);
             return definition;
         }
 
@@ -479,10 +636,72 @@ namespace DiceRogue
             return definition;
         }
 
+        private static MapNodeDefinition CreateNode(
+            string id,
+            string displayName,
+            MapNodeType type,
+            EncounterDefinition encounterDefinition,
+            params int[] nextNodes)
+        {
+            var definition = new MapNodeDefinition();
+            SetPrivateField(definition, "id", id);
+            SetPrivateField(definition, "displayName", displayName);
+            SetPrivateField(definition, "nodeType", type);
+            SetPrivateField(definition, "encounterDefinition", encounterDefinition);
+            SetPrivateField(definition, "enemyTemplate", encounterDefinition?.EnemyTemplates != null && encounterDefinition.EnemyTemplates.Count > 0
+                ? encounterDefinition.EnemyTemplates[0]
+                : null);
+            SetPrivateField(definition, "nextNodeIndices", new List<int>(nextNodes));
+            return definition;
+        }
+
         private static void SetPrivateField<TTarget, TValue>(TTarget target, string fieldName, TValue value)
         {
             var field = typeof(TTarget).GetField(fieldName, System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic);
             field?.SetValue(target, value);
+        }
+
+        private static DiceLoadoutDefinition CreateLoadout(
+            string id,
+            string displayName,
+            DiceBuildIdentity identity,
+            params SkillDefinition[] skills)
+        {
+            var loadout = ScriptableObject.CreateInstance<DiceLoadoutDefinition>();
+            loadout.Configure(id, displayName, identity, skills);
+            return loadout;
+        }
+
+        private static SkillDefinition FindSkill(IReadOnlyList<SkillDefinition> skillLibrary, string skillId)
+        {
+            if (skillLibrary == null)
+            {
+                return null;
+            }
+
+            for (var index = 0; index < skillLibrary.Count; index++)
+            {
+                if (skillLibrary[index] != null && skillLibrary[index].Id == skillId)
+                {
+                    return skillLibrary[index];
+                }
+            }
+
+            return null;
+        }
+
+        private static EncounterDefinition CreateEncounter(
+            string id,
+            string displayName,
+            bool isBossEncounter,
+            params CombatantTemplate[] enemyTemplates)
+        {
+            var encounter = new EncounterDefinition();
+            SetPrivateField(encounter, "id", id);
+            SetPrivateField(encounter, "displayName", displayName);
+            SetPrivateField(encounter, "isBossEncounter", isBossEncounter);
+            SetPrivateField(encounter, "enemyTemplates", new List<CombatantTemplate>(enemyTemplates));
+            return encounter;
         }
     }
 }

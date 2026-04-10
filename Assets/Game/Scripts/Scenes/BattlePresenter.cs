@@ -40,6 +40,15 @@ namespace DiceRogue
                 viewLookup[battleSystem.Player] = playerView;
             }
 
+            var activeEnemies = new List<CombatantRuntimeState>();
+            for (var enemyIndex = 0; enemyIndex < battleSystem.Enemies.Count; enemyIndex++)
+            {
+                if (battleSystem.Enemies[enemyIndex] != null && battleSystem.Enemies[enemyIndex].IsAlive)
+                {
+                    activeEnemies.Add(battleSystem.Enemies[enemyIndex]);
+                }
+            }
+
             for (var index = 0; index < enemyViews.Length; index++)
             {
                 if (enemyViews[index] == null)
@@ -47,11 +56,10 @@ namespace DiceRogue
                     continue;
                 }
 
-                // TODO: 전투 데이터가 다중 적을 지원하게 되면 enemyViews[1..2]에도 런타임 적 상태를 바인딩한다.
-                if (index == 0 && battleSystem.Enemy != null)
+                if (index < activeEnemies.Count)
                 {
-                    enemyViews[index].Bind(battleSystem.Enemy);
-                    viewLookup[battleSystem.Enemy] = enemyViews[index];
+                    enemyViews[index].Bind(activeEnemies[index]);
+                    viewLookup[activeEnemies[index]] = enemyViews[index];
                 }
                 else
                 {
@@ -70,12 +78,14 @@ namespace DiceRogue
                 yield break;
             }
 
+            BindBattle(battleSystem);
             battleHud?.Refresh(battleSystem, report);
             yield return new WaitForSeconds(preActionDelay);
 
             foreach (var actionResult in report.ActionResults)
             {
                 yield return PlayActionResult(battleSystem, report, actionResult);
+                BindBattle(battleSystem);
                 yield return new WaitForSeconds(betweenActionsDelay);
             }
 
@@ -91,6 +101,7 @@ namespace DiceRogue
                 yield break;
             }
 
+            battleHud?.Refresh(battleSystem, report, actionResult.Actor.DisplayName);
             actorView.SetHighlighted(true);
             actorView.Refresh();
             yield return new WaitForSeconds(0.06f);
@@ -104,10 +115,10 @@ namespace DiceRogue
                     yield return PlayGuardAction(battleSystem, report, actorView, actionResult);
                     break;
                 case SkillActionType.Buff:
-                    yield return PlayHealAction(battleSystem, report, actorView, actionResult);
+                    yield return PlayBuffAction(battleSystem, report, actorView, actionResult);
                     break;
                 case SkillActionType.Debuff:
-                    yield return PlayBerserkAction(battleSystem, report, actorView, actionResult);
+                    yield return PlayDebuffAction(battleSystem, report, actorView, actionResult);
                     break;
             }
 
@@ -142,22 +153,22 @@ namespace DiceRogue
                 }
                 else
                 {
-                    floatingTextSpawner?.Spawn(primaryTargetView.PopupAnchor, "막힘", new Color(0.75f, 0.9f, 1f));
+                    floatingTextSpawner?.Spawn(primaryTargetView.PopupAnchor, "Blocked", new Color(0.75f, 0.9f, 1f));
                 }
 
                 if (totalShieldBlocked > 0)
                 {
-                    floatingTextSpawner?.Spawn(primaryTargetView.PopupAnchor, $"방어도 {totalShieldBlocked}", new Color(0.55f, 0.85f, 1f));
+                    floatingTextSpawner?.Spawn(primaryTargetView.PopupAnchor, $"Shield {totalShieldBlocked}", new Color(0.55f, 0.85f, 1f));
                 }
 
                 if (actionResult.HealAmount > 0)
                 {
-                    floatingTextSpawner?.Spawn(actorView.PopupAnchor, $"+{actionResult.HealAmount} 회복", new Color(0.45f, 1f, 0.55f));
+                    floatingTextSpawner?.Spawn(actorView.PopupAnchor, $"+{actionResult.HealAmount} Heal", new Color(0.45f, 1f, 0.55f));
                 }
 
                 if (actionResult.ReflectedDamageTaken > 0)
                 {
-                    floatingTextSpawner?.Spawn(actorView.PopupAnchor, $"-{actionResult.ReflectedDamageTaken} 반사", new Color(1f, 0.65f, 0.2f));
+                    floatingTextSpawner?.Spawn(actorView.PopupAnchor, $"-{actionResult.ReflectedDamageTaken} Reflect", new Color(1f, 0.65f, 0.2f));
                     actorView.Refresh();
                 }
 
@@ -169,57 +180,68 @@ namespace DiceRogue
                 }
             }
 
-            battleHud?.Refresh(battleSystem, report);
+            battleHud?.Refresh(battleSystem, report, actionResult.Actor != null ? actionResult.Actor.DisplayName : null);
         }
 
         private IEnumerator PlayGuardAction(BattleSystem battleSystem, BattleTurnReport report, UnitView actorView, BattleActionResult actionResult)
         {
             yield return actorView.PlayShieldPulse();
+
             if (actionResult.ShieldGain > 0)
             {
-                floatingTextSpawner?.Spawn(actorView.PopupAnchor, $"+{actionResult.ShieldGain} 방어도", new Color(0.5f, 0.8f, 1f));
+                floatingTextSpawner?.Spawn(actorView.PopupAnchor, $"+{actionResult.ShieldGain} Shield", new Color(0.5f, 0.8f, 1f));
             }
 
             if (actionResult.ArmorGain > 0)
             {
-                floatingTextSpawner?.Spawn(actorView.PopupAnchor, $"+{actionResult.ArmorGain} 방어력", new Color(0.85f, 0.9f, 1f));
+                floatingTextSpawner?.Spawn(actorView.PopupAnchor, $"+{actionResult.ArmorGain} Armor", new Color(0.85f, 0.9f, 1f));
             }
 
             if (actionResult.NextTurnShieldGain > 0)
             {
-                floatingTextSpawner?.Spawn(actorView.PopupAnchor, $"다음 턴 +{actionResult.NextTurnShieldGain}", new Color(0.5f, 1f, 1f));
+                floatingTextSpawner?.Spawn(actorView.PopupAnchor, $"Next +{actionResult.NextTurnShieldGain} Shield", new Color(0.5f, 1f, 1f));
             }
 
             actorView.Refresh();
-            battleHud?.Refresh(battleSystem, report);
+            battleHud?.Refresh(battleSystem, report, actionResult.Actor != null ? actionResult.Actor.DisplayName : null);
         }
 
-        private IEnumerator PlayHealAction(BattleSystem battleSystem, BattleTurnReport report, UnitView actorView, BattleActionResult actionResult)
+        private IEnumerator PlayBuffAction(BattleSystem battleSystem, BattleTurnReport report, UnitView actorView, BattleActionResult actionResult)
         {
             yield return actorView.PlayRagePulse();
 
             if (actionResult.RageGain > 0)
             {
-                floatingTextSpawner?.Spawn(actorView.PopupAnchor, $"+{actionResult.RageGain} 분노", new Color(1f, 0.7f, 0.2f));
+                floatingTextSpawner?.Spawn(actorView.PopupAnchor, $"+{actionResult.RageGain} Rage", new Color(1f, 0.7f, 0.2f));
+            }
+
+            if (actionResult.SummonedCount > 0)
+            {
+                floatingTextSpawner?.Spawn(actorView.PopupAnchor, $"+{actionResult.SummonedCount} Summon", new Color(0.7f, 1f, 0.8f));
+            }
+
+            if (actionResult.SummonedAllyAttackBonusGranted > 0)
+            {
+                floatingTextSpawner?.Spawn(actorView.PopupAnchor, $"+{actionResult.SummonedAllyAttackBonusGranted} Aura", new Color(1f, 0.82f, 0.3f));
             }
 
             if (actionResult.ActivatedBerserk)
             {
                 yield return actorView.PlayBerserkPulse();
-                floatingTextSpawner?.Spawn(actorView.PopupAnchor, "광분!", new Color(1f, 0.45f, 0.95f));
+                floatingTextSpawner?.Spawn(actorView.PopupAnchor, "Berserk!", new Color(1f, 0.45f, 0.95f));
             }
 
             actorView.Refresh();
-            battleHud?.Refresh(battleSystem, report);
+            battleHud?.Refresh(battleSystem, report, actionResult.Actor != null ? actionResult.Actor.DisplayName : null);
         }
 
-        private IEnumerator PlayBerserkAction(BattleSystem battleSystem, BattleTurnReport report, UnitView actorView, BattleActionResult actionResult)
+        private IEnumerator PlayDebuffAction(BattleSystem battleSystem, BattleTurnReport report, UnitView actorView, BattleActionResult actionResult)
         {
             yield return actorView.PlayShieldPulse();
 
             if (actionResult.AttackModifier != 0)
             {
-                floatingTextSpawner?.Spawn(actorView.PopupAnchor, $"공격 {actionResult.AttackModifier:+#;-#;0}", new Color(1f, 0.7f, 0.2f));
+                floatingTextSpawner?.Spawn(actorView.PopupAnchor, $"Attack {actionResult.AttackModifier:+#;-#;0}", new Color(1f, 0.7f, 0.2f));
             }
 
             if (actionResult.DicePointModifier != 0)
@@ -234,7 +256,7 @@ namespace DiceRogue
                 yield return actorView.PlayDeathFade();
             }
 
-            battleHud?.Refresh(battleSystem, report);
+            battleHud?.Refresh(battleSystem, report, actionResult.Actor != null ? actionResult.Actor.DisplayName : null);
         }
 
         private UnitView GetTargetView(BattleTargetResult targetResult)

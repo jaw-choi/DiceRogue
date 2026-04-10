@@ -12,8 +12,9 @@ namespace DiceRogue
     {
         Self = 0,
         RandomEnemy = 1,
-        HighestHpEnemy = 2,
-        AllEnemies = 3
+        HighHpEnemy = 2,
+        AllEnemies = 3,
+        HighestHpEnemy = HighHpEnemy
     }
 
     public enum RewardType
@@ -22,10 +23,20 @@ namespace DiceRogue
         UpgradeFace = 1
     }
 
+    public enum DiceBuildIdentity
+    {
+        Balanced = 0,
+        Defensive = 1,
+        Berserker = 2
+    }
+
     public enum MapNodeType
     {
         Battle = 0,
-        Boss = 1
+        EliteBattle = 1,
+        Reward = 2,
+        Shop = 3,
+        Boss = 4
     }
 
     public enum BattleResultType

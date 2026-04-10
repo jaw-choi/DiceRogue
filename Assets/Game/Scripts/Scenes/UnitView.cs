@@ -170,7 +170,9 @@ namespace DiceRogue
 
             if (rageText != null)
             {
-                rageText.text = $"Rage {BoundState.Rage}";
+                rageText.text = BoundState.IsBerserkActive
+                    ? $"Rage {BoundState.Rage} | Berserk"
+                    : $"Rage {BoundState.Rage}";
             }
         }
 

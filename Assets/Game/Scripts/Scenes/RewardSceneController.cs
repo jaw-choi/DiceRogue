@@ -1,6 +1,6 @@
+using TMPro;
 using UnityEngine;
 using UnityEngine.UI;
-using TMPro;
 
 namespace DiceRogue
 {
@@ -43,7 +43,7 @@ namespace DiceRogue
 
             if (skipButton != null)
             {
-                skipButton.onClick.AddListener(runManager.ReturnToMap);
+                skipButton.onClick.AddListener(runManager.SkipCurrentReward);
             }
         }
 
@@ -60,34 +60,40 @@ namespace DiceRogue
         {
             if (headerText != null)
             {
-                headerText.text = selectedReward == null ? "보상 선택" : "장착 슬롯 선택";
+                headerText.text = selectedReward == null
+                    ? runManager.GetRewardContextLabel()
+                    : "Choose a Die Face";
             }
 
             if (playerStatsText != null)
             {
-                playerStatsText.text = runManager.PlayerState.GetStatsText();
+                playerStatsText.text = BuildPlayerOverviewText();
             }
 
             if (diceText != null)
             {
-                diceText.text = runManager.PlayerState.GetDiceText();
+                diceText.text = $"Current 6 Faces\n{runManager.PlayerState.GetDiceText()}";
             }
 
             if (promptText != null)
             {
                 promptText.text = selectedReward == null
-                    ? "획득할 보상을 하나 선택하세요"
-                    : $"{selectedReward.Title}를 장착할 슬롯을 선택하세요";
+                    ? BuildRewardPrompt()
+                    : selectedReward.RewardType == RewardType.UpgradeFace
+                        ? $"{selectedReward.Title}: choose which face to upgrade."
+                        : $"{selectedReward.Title}: choose which face to replace.";
             }
 
             if (slotPromptText != null)
             {
                 slotPromptText.text = selectedReward == null
-                    ? "먼저 보상을 선택하세요"
-                    : $"{selectedReward.Title}를 넣을 주사위 면을 선택하세요";
+                    ? "Select a reward first."
+                    : selectedReward.RewardType == RewardType.UpgradeFace
+                        ? "Pick one current face to upgrade."
+                        : "Pick one current face to replace.";
             }
 
-            SceneUILayoutHelper.SetButtonLabel(skipButton, "지도 보기");
+            SceneUILayoutHelper.SetButtonLabel(skipButton, runManager.CurrentRewardSourceType == MapNodeType.Shop ? "Leave Shop" : "Skip Reward");
         }
 
         private void RenderRewardButtons()
@@ -114,10 +120,21 @@ namespace DiceRogue
                 slotButtonRoot,
                 slotButtonTemplate,
                 runManager.PlayerState.DiceFaces.Count,
-                index => $"Slot {index + 1}\n{runManager.PlayerState.DiceFaces[index].GetSummary()}",
+                index => runManager.PlayerState.DiceFaces[index].GetInspectText(index),
                 OnSlotSelected);
 
             DynamicButtonLayoutHelper.ArrangeChildrenVertically(slotButtonRoot, slotButtonTemplate, 24f);
+        }
+
+        private string BuildRewardPrompt()
+        {
+            return runManager.CurrentRewardSourceType switch
+            {
+                MapNodeType.Shop => "Choose a forge offer. Skill offers replace one face. Upgrade improves one face.",
+                MapNodeType.Reward => "Choose a treasure reward. Skill offers replace one face. Upgrade improves one face.",
+                MapNodeType.EliteBattle => "Elite rewards are stronger. Pick one skill offer or upgrade one face.",
+                _ => "Choose one reward. Skill offers replace one face. Upgrade improves one face."
+            };
         }
 
         private void OnRewardSelected(int rewardIndex)
@@ -363,6 +380,19 @@ namespace DiceRogue
             label.overflowMode = TextOverflowModes.Ellipsis;
             label.alignment = TextAlignmentOptions.Center;
             label.fontStyle = FontStyles.Bold;
+        }
+
+        private string BuildPlayerOverviewText()
+        {
+            var player = runManager != null ? runManager.PlayerState : null;
+            if (player == null)
+            {
+                return "Player";
+            }
+
+            return player.IsBerserkActive
+                ? $"Player HP {player.CurrentHp}/{player.MaxHp}  Shield {player.Shield}  Armor {player.Armor}  Rage {player.Rage}  Berserk {player.BerserkTurnsRemaining}t"
+                : $"Player HP {player.CurrentHp}/{player.MaxHp}  Shield {player.Shield}  Armor {player.Armor}  Rage {player.Rage}";
         }
     }
 }

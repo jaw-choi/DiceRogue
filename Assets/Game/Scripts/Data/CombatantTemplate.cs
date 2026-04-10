@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using System.Linq;
 using UnityEngine;
 
 namespace DiceRogue
@@ -15,6 +16,7 @@ namespace DiceRogue
         [SerializeField] private bool isBoss;
         [SerializeField] private Sprite battleSprite;
         [SerializeField] private Color battleTint = Color.white;
+        [SerializeField] private DiceLoadoutDefinition diceLoadout;
         [SerializeField] private List<SkillDefinition> diceSkills = new List<SkillDefinition>(6);
 
         public string Id => id;
@@ -28,6 +30,15 @@ namespace DiceRogue
         public bool IsBoss => isBoss;
         public Sprite BattleSprite => battleSprite;
         public Color BattleTint => battleTint;
-        public IReadOnlyList<SkillDefinition> DiceSkills => diceSkills;
+        public DiceLoadoutDefinition DiceLoadout => diceLoadout;
+        public IReadOnlyList<SkillDefinition> DiceSkills => diceLoadout != null ? diceLoadout.Faces : diceSkills;
+
+        private void OnValidate()
+        {
+            if (diceLoadout == null)
+            {
+                diceSkills = DiceLoadoutDefinition.Normalize(diceSkills).ToList();
+            }
+        }
     }
 }

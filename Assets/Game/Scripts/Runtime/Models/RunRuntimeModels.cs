@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Text;
 using UnityEngine;
 
@@ -48,6 +49,168 @@ namespace DiceRogue
         {
             return skill == null ? "비어 있음" : $"{skill.DisplayName} Lv.{upgradeLevel} / {skill.GetSummary(upgradeLevel)}";
         }
+
+        public string GetInspectText(int faceIndex)
+        {
+            if (skill == null)
+            {
+                return $"{faceIndex + 1}. Empty Face | No skill assigned | Empty";
+            }
+
+            var upgradeState = upgradeLevel > 0 ? $"Upgraded Lv.{upgradeLevel}" : "Base";
+            return $"{faceIndex + 1}. {skill.DisplayName} | {skill.GetSummary(upgradeLevel)} | {upgradeState}";
+        }
+    }
+
+    [Serializable]
+    public class DiceLoadoutState
+    {
+        private readonly List<DiceFaceState> faces = new List<DiceFaceState>(DiceLoadoutDefinition.FaceCount);
+
+        public DiceLoadoutState(IEnumerable<SkillDefinition> skills)
+        {
+            SetFaces(skills);
+        }
+
+        public IReadOnlyList<DiceFaceState> Faces => faces;
+        public int FaceCount => faces.Count;
+        public bool IsValid => faces.Count == DiceLoadoutDefinition.FaceCount;
+
+        public void SetFaces(IEnumerable<SkillDefinition> skills)
+        {
+            faces.Clear();
+
+            foreach (var skill in DiceLoadoutDefinition.Normalize(skills))
+            {
+                faces.Add(new DiceFaceState(skill));
+            }
+        }
+
+        public bool ReplaceFace(int slotIndex, SkillDefinition skill)
+        {
+            if (!IsValidSlotIndex(slotIndex))
+            {
+                return false;
+            }
+
+            faces[slotIndex].ReplaceSkill(skill);
+            return true;
+        }
+
+        public bool UpgradeFace(int slotIndex)
+        {
+            if (!IsValidSlotIndex(slotIndex) || faces[slotIndex].Skill == null)
+            {
+                return false;
+            }
+
+            faces[slotIndex].ApplyUpgrade();
+            return true;
+        }
+
+        public bool ApplyPrototypeIdentity(DiceBuildIdentity identity, IReadOnlyList<SkillDefinition> skillLibrary)
+        {
+            var basicAttack = FindSkill(skillLibrary, "basic_attack");
+            var defensiveStance = FindSkill(skillLibrary, "defensive_stance");
+            var focusedDefense = FindSkill(skillLibrary, "focused_defense");
+            var counter = FindSkill(skillLibrary, "counter");
+            var shieldBurst = FindSkill(skillLibrary, "shield_burst");
+            var bloodSlash = FindSkill(skillLibrary, "blood_slash");
+            var fury = FindSkill(skillLibrary, "fury");
+            var savageStrike = FindSkill(skillLibrary, "savage_strike");
+            var vampiricSlash = FindSkill(skillLibrary, "vampiric_slash");
+
+            SkillDefinition[] preset;
+            switch (identity)
+            {
+                case DiceBuildIdentity.Defensive:
+                    preset = new[]
+                    {
+                        defensiveStance,
+                        focusedDefense,
+                        defensiveStance,
+                        counter,
+                        shieldBurst,
+                        basicAttack
+                    };
+                    break;
+                case DiceBuildIdentity.Berserker:
+                    preset = new[]
+                    {
+                        bloodSlash,
+                        fury,
+                        savageStrike,
+                        vampiricSlash,
+                        bloodSlash,
+                        basicAttack
+                    };
+                    break;
+                case DiceBuildIdentity.Balanced:
+                default:
+                    preset = new[]
+                    {
+                        basicAttack,
+                        defensiveStance,
+                        basicAttack,
+                        focusedDefense,
+                        counter,
+                        fury
+                    };
+                    break;
+            }
+
+            if (preset.Any(skill => skill == null))
+            {
+                return false;
+            }
+
+            for (var index = 0; index < preset.Length; index++)
+            {
+                faces[index].ReplaceSkill(preset[index]);
+            }
+
+            return true;
+        }
+
+        public string GetInspectionText()
+        {
+            var builder = new StringBuilder();
+
+            for (var index = 0; index < faces.Count; index++)
+            {
+                builder.Append(faces[index].GetInspectText(index));
+
+                if (index < faces.Count - 1)
+                {
+                    builder.AppendLine();
+                }
+            }
+
+            return builder.ToString();
+        }
+
+        private bool IsValidSlotIndex(int slotIndex)
+        {
+            return slotIndex >= 0 && slotIndex < faces.Count;
+        }
+
+        private static SkillDefinition FindSkill(IReadOnlyList<SkillDefinition> skillLibrary, string skillId)
+        {
+            if (skillLibrary == null)
+            {
+                return null;
+            }
+
+            for (var index = 0; index < skillLibrary.Count; index++)
+            {
+                if (skillLibrary[index] != null && skillLibrary[index].Id == skillId)
+                {
+                    return skillLibrary[index];
+                }
+            }
+
+            return null;
+        }
     }
 
     [Serializable]
@@ -55,19 +218,13 @@ namespace DiceRogue
     {
         private const int MaxRageValue = 15;
 
-        private readonly List<DiceFaceState> diceFaces = new List<DiceFaceState>(6);
-
         public CombatantRuntimeState(CombatantTemplate template)
         {
             Template = template;
             DisplayName = template.DisplayName;
             MaxHp = template.MaxHp;
             CurrentHp = template.MaxHp;
-
-            foreach (var skill in template.DiceSkills)
-            {
-                diceFaces.Add(new DiceFaceState(skill));
-            }
+            DiceLoadout = new DiceLoadoutState(template.DiceSkills);
         }
 
         public CombatantTemplate Template { get; }
@@ -82,8 +239,12 @@ namespace DiceRogue
         public int PendingNextTurnAttackModifier { get; private set; }
         public int PendingNextTurnDicePointModifier { get; private set; }
         public int BerserkTurnsRemaining { get; private set; }
+        public int PersistentAttackBonus { get; private set; }
+        public bool IsSummoned { get; private set; }
+        public string SummonerId { get; private set; }
         public DiceFaceState LastRolledFace { get; private set; }
-        public IReadOnlyList<DiceFaceState> DiceFaces => diceFaces;
+        public DiceLoadoutState DiceLoadout { get; }
+        public IReadOnlyList<DiceFaceState> DiceFaces => DiceLoadout.Faces;
         public bool IsAlive => CurrentHp > 0;
         public bool IsBerserkActive => BerserkTurnsRemaining > 0;
         public int BaseDicePoints => Template.BaseDicePoints;
@@ -106,6 +267,25 @@ namespace DiceRogue
             PendingNextTurnAttackModifier = 0;
             PendingNextTurnDicePointModifier = 0;
             BerserkTurnsRemaining = 0;
+            PersistentAttackBonus = 0;
+            IsSummoned = false;
+            SummonerId = null;
+            LastRolledFace = null;
+        }
+
+        public void ResetTemporaryCombatState()
+        {
+            Shield = 0;
+            Armor = 0;
+            Rage = 0;
+            CurrentAttackModifier = 0;
+            PendingNextTurnShield = 0;
+            PendingNextTurnAttackModifier = 0;
+            PendingNextTurnDicePointModifier = 0;
+            BerserkTurnsRemaining = 0;
+            PersistentAttackBonus = 0;
+            IsSummoned = false;
+            SummonerId = null;
             LastRolledFace = null;
         }
 
@@ -195,6 +375,17 @@ namespace DiceRogue
             PendingNextTurnDicePointModifier += amount;
         }
 
+        public void AddPersistentAttackBonus(int amount)
+        {
+            PersistentAttackBonus += amount;
+        }
+
+        public void MarkAsSummoned(string summonerId)
+        {
+            IsSummoned = true;
+            SummonerId = summonerId;
+        }
+
         public bool GainRage(int amount)
         {
             if (amount <= 0)
@@ -219,7 +410,7 @@ namespace DiceRogue
 
         public int GetAttackBonus()
         {
-            return Rage + CurrentAttackModifier + BerserkAttackBonus;
+            return Rage + CurrentAttackModifier + PersistentAttackBonus + BerserkAttackBonus;
         }
 
         public void Heal(int amount)
@@ -249,47 +440,30 @@ namespace DiceRogue
 
         public void ReplaceFace(int slotIndex, SkillDefinition skill)
         {
-            if (slotIndex < 0 || slotIndex >= diceFaces.Count)
-            {
-                return;
-            }
-
-            diceFaces[slotIndex].ReplaceSkill(skill);
+            DiceLoadout.ReplaceFace(slotIndex, skill);
         }
 
         public void UpgradeFace(int slotIndex)
         {
-            if (slotIndex < 0 || slotIndex >= diceFaces.Count)
-            {
-                return;
-            }
+            DiceLoadout.UpgradeFace(slotIndex);
+        }
 
-            diceFaces[slotIndex].ApplyUpgrade();
+        public bool ApplyDiceBuildIdentity(DiceBuildIdentity identity, IReadOnlyList<SkillDefinition> skillLibrary)
+        {
+            return DiceLoadout.ApplyPrototypeIdentity(identity, skillLibrary);
         }
 
         public string GetStatsText()
         {
             var berserkText = IsBerserkActive ? $" | 광분 {BerserkTurnsRemaining}턴" : string.Empty;
-            return $"{DisplayName} | HP {CurrentHp}/{MaxHp} | 방어도 {Shield} | 방어력 {Armor} | 분노 {Rage}{berserkText}";
+            var summonText = IsSummoned ? " | Summoned" : string.Empty;
+            var auraText = PersistentAttackBonus != 0 ? $" | 공격 보너스 {PersistentAttackBonus:+#;-#;0}" : string.Empty;
+            return $"{DisplayName} | HP {CurrentHp}/{MaxHp} | 방어도 {Shield} | 방어력 {Armor} | 분노 {Rage}{berserkText}{auraText}{summonText}";
         }
 
         public string GetDiceText()
         {
-            var builder = new StringBuilder();
-
-            for (var index = 0; index < diceFaces.Count; index++)
-            {
-                builder.Append(index + 1);
-                builder.Append(". ");
-                builder.Append(diceFaces[index].GetSummary());
-
-                if (index < diceFaces.Count - 1)
-                {
-                    builder.AppendLine();
-                }
-            }
-
-            return builder.ToString();
+            return DiceLoadout.GetInspectionText();
         }
     }
 
@@ -330,7 +504,10 @@ namespace DiceRogue
     public class BattleTurnReport
     {
         public int TurnNumber;
+        public int PlayerTurnDicePoints;
+        public string CurrentActingUnitName;
         public readonly List<string> LogLines = new List<string>();
+        public readonly List<string> TurnOrderEntries = new List<string>();
         public readonly List<BattleActionResult> ActionResults = new List<BattleActionResult>();
         public readonly List<DiceFaceState> PlayerFaces = new List<DiceFaceState>();
         public readonly List<DiceFaceState> EnemyFaces = new List<DiceFaceState>();

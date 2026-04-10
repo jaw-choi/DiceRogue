@@ -7,7 +7,7 @@ namespace DiceRogue
     public class SkillDefinition : ScriptableObject
     {
         [SerializeField] private string id = "skill_id";
-        [SerializeField] private string displayName = "기본 공격";
+        [SerializeField] private string displayName = "Basic Attack";
         [SerializeField] private SkillActionType actionType = SkillActionType.Attack;
         [SerializeField] private SkillTargetType targetType = SkillTargetType.RandomEnemy;
         [SerializeField] private int attackAmount;
@@ -36,9 +36,13 @@ namespace DiceRogue
         [SerializeField] private int repeatCountUpgradeAmount;
         [SerializeField] private int bonusDicePointsOnFirstRoll;
         [SerializeField] private int bonusDicePointsUpgradeAmount;
+        [SerializeField] private CombatantTemplate summonTemplate;
+        [SerializeField] private int summonCount;
+        [SerializeField] private int maxSummonedAllies;
+        [SerializeField] private int summonedAllyAttackBonusAmount;
         [SerializeField] private bool consumeAllShield;
         [SerializeField] private Color accentColor = Color.white;
-        [SerializeField] [TextArea(2, 4)] private string description = "피해를 줍니다.";
+        [SerializeField] [TextArea(2, 4)] private string description = "Deal damage.";
 
         public string Id => id;
         public string DisplayName => displayName;
@@ -57,6 +61,10 @@ namespace DiceRogue
         public int DicePointModifierAmount => dicePointModifierAmount;
         public int RepeatCount => repeatCount;
         public int BonusDicePointsOnFirstRoll => bonusDicePointsOnFirstRoll;
+        public CombatantTemplate SummonTemplate => summonTemplate;
+        public int SummonCount => summonCount;
+        public int MaxSummonedAllies => maxSummonedAllies;
+        public int SummonedAllyAttackBonusAmount => summonedAllyAttackBonusAmount;
         public bool ConsumeAllShield => consumeAllShield;
         public Color AccentColor => accentColor;
         public string Description => description;
@@ -81,52 +89,52 @@ namespace DiceRogue
 
             if (GetAttackAmount(upgradeLevel) > 0)
             {
-                builder.Append($"피해 {GetAttackAmount(upgradeLevel)}");
+                builder.Append($"Damage {GetAttackAmount(upgradeLevel)}");
             }
 
             if (GetShieldDamagePercent(upgradeLevel) > 0)
             {
-                AppendWithSeparator(builder, $"방어도 비례 {GetShieldDamagePercent(upgradeLevel)}%");
+                AppendWithSeparator(builder, $"Shield ratio {GetShieldDamagePercent(upgradeLevel)}%");
             }
 
             if (GetShieldAmount(upgradeLevel) > 0)
             {
-                AppendWithSeparator(builder, $"방어도 +{GetShieldAmount(upgradeLevel)}");
+                AppendWithSeparator(builder, $"Shield +{GetShieldAmount(upgradeLevel)}");
             }
 
             if (GetArmorAmount(upgradeLevel) > 0)
             {
-                AppendWithSeparator(builder, $"방어력 +{GetArmorAmount(upgradeLevel)}");
+                AppendWithSeparator(builder, $"Armor +{GetArmorAmount(upgradeLevel)}");
             }
 
             if (GetNextTurnShieldAmount(upgradeLevel) > 0)
             {
-                AppendWithSeparator(builder, $"다음 턴 방어도 +{GetNextTurnShieldAmount(upgradeLevel)}");
+                AppendWithSeparator(builder, $"Next turn Shield +{GetNextTurnShieldAmount(upgradeLevel)}");
             }
 
             if (GetRageGainAmount(upgradeLevel) > 0)
             {
-                AppendWithSeparator(builder, $"분노 +{GetRageGainAmount(upgradeLevel)}");
+                AppendWithSeparator(builder, $"Rage +{GetRageGainAmount(upgradeLevel)}");
             }
 
             if (GetRageCostAmount(upgradeLevel) > 0)
             {
-                AppendWithSeparator(builder, $"분노 -{GetRageCostAmount(upgradeLevel)}");
+                AppendWithSeparator(builder, $"Spend Rage {GetRageCostAmount(upgradeLevel)}");
             }
 
             if (GetSelfDamageAmount(upgradeLevel) > 0)
             {
-                AppendWithSeparator(builder, $"자신 HP -{GetSelfDamageAmount(upgradeLevel)}");
+                AppendWithSeparator(builder, $"Self HP -{GetSelfDamageAmount(upgradeLevel)}");
             }
 
             if (GetLifestealPercent(upgradeLevel) > 0)
             {
-                AppendWithSeparator(builder, $"흡혈 {GetLifestealPercent(upgradeLevel)}%");
+                AppendWithSeparator(builder, $"Lifesteal {GetLifestealPercent(upgradeLevel)}%");
             }
 
             if (GetAttackModifierAmount(upgradeLevel) != 0)
             {
-                AppendWithSeparator(builder, $"공격 {(GetAttackModifierAmount(upgradeLevel) > 0 ? "+" : string.Empty)}{GetAttackModifierAmount(upgradeLevel)}");
+                AppendWithSeparator(builder, $"Attack {(GetAttackModifierAmount(upgradeLevel) > 0 ? "+" : string.Empty)}{GetAttackModifierAmount(upgradeLevel)}");
             }
 
             if (GetDicePointModifierAmount(upgradeLevel) != 0)
@@ -136,17 +144,27 @@ namespace DiceRogue
 
             if (GetRepeatCount(upgradeLevel) > 1)
             {
-                AppendWithSeparator(builder, $"{GetRepeatCount(upgradeLevel)}회");
+                AppendWithSeparator(builder, $"Repeat x{GetRepeatCount(upgradeLevel)}");
             }
 
             if (GetBonusDicePointsOnFirstRoll(upgradeLevel) > 0)
             {
-                AppendWithSeparator(builder, $"첫 등장 DP +{GetBonusDicePointsOnFirstRoll(upgradeLevel)}");
+                AppendWithSeparator(builder, $"First roll DP +{GetBonusDicePointsOnFirstRoll(upgradeLevel)}");
+            }
+
+            if (summonTemplate != null)
+            {
+                AppendWithSeparator(builder, $"Summon {summonTemplate.DisplayName} x{Mathf.Max(1, summonCount)}");
+            }
+
+            if (summonedAllyAttackBonusAmount != 0)
+            {
+                AppendWithSeparator(builder, $"Summoned ally Attack {(summonedAllyAttackBonusAmount > 0 ? "+" : string.Empty)}{summonedAllyAttackBonusAmount}");
             }
 
             if (consumeAllShield)
             {
-                AppendWithSeparator(builder, "방어도 전부 소모");
+                AppendWithSeparator(builder, "Consume all Shield");
             }
 
             return builder.Length > 0 ? builder.ToString() : description;

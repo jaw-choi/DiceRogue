@@ -1,9 +1,9 @@
 using System.Linq;
 using System.Text;
+using TMPro;
 using UnityEngine;
 using UnityEngine.SceneManagement;
 using UnityEngine.UI;
-using TMPro;
 
 namespace DiceRogue
 {
@@ -53,22 +53,22 @@ namespace DiceRogue
         {
             if (headerText != null)
             {
-                headerText.text = "전투 지도";
+                headerText.text = "Dungeon Route";
             }
 
             if (playerStatsText != null)
             {
-                playerStatsText.text = runManager.PlayerState.GetStatsText();
+                playerStatsText.text = BuildPlayerOverviewText();
             }
 
             if (diceText != null)
             {
-                diceText.text = runManager.PlayerState.GetDiceText();
+                diceText.text = $"Current 6 Faces\n{runManager.PlayerState.GetDiceText()}";
             }
 
             if (unlockedSkillsText != null)
             {
-                unlockedSkillsText.text = $"해금한 스킬\n{runManager.GetUnlockedSkillSummary()}";
+                unlockedSkillsText.text = $"Unlocked Skills\n{runManager.GetUnlockedSkillSummary()}";
             }
 
             if (mapProgressText != null)
@@ -76,8 +76,8 @@ namespace DiceRogue
                 var builder = new StringBuilder();
                 foreach (var node in runManager.MapSystem.Nodes)
                 {
-                    var status = node.IsCompleted ? "완료" : node.IsUnlocked ? "진행 가능" : "잠김";
-                    builder.AppendLine($"{node.Index + 1}. {node.Definition.DisplayName} / {node.Definition.EnemyTemplate.DisplayName} / {status}");
+                    var status = node.IsCompleted ? "Complete" : node.IsUnlocked ? "Available" : "Locked";
+                    builder.AppendLine($"{node.Index + 1}. [{node.Definition.GetNodeTypeLabel()}] {node.Definition.DisplayName} / {node.Definition.GetEncounterSummary()} / {status}");
                 }
 
                 mapProgressText.text = builder.ToString();
@@ -106,7 +106,7 @@ namespace DiceRogue
                 var label = button.GetComponentInChildren<TMP_Text>();
                 if (label != null)
                 {
-                    label.text = $"{node.Definition.DisplayName}\n{node.Definition.EnemyTemplate.DisplayName}";
+                    label.text = $"[{node.Definition.GetNodeTypeLabel()}] {node.Definition.DisplayName}\n{node.Definition.GetEncounterSummary()}";
                 }
 
                 if (button.transform is RectTransform rectTransform)
@@ -117,12 +117,12 @@ namespace DiceRogue
 
                 var nodeIndex = node.Index;
                 button.onClick.RemoveAllListeners();
-                button.onClick.AddListener(() => runManager.BeginBattleFromMap(nodeIndex));
+                button.onClick.AddListener(() => runManager.SelectMapNode(nodeIndex));
             }
 
             DynamicButtonLayoutHelper.ArrangeChildrenVertically(nodeButtonRoot, nodeButtonTemplate, 24f);
-            SceneUILayoutHelper.SetButtonLabel(returnMenuButton, "메인으로");
-            SceneUILayoutHelper.SetButtonLabel(debugRewardButton, "보상 테스트");
+            SceneUILayoutHelper.SetButtonLabel(returnMenuButton, "Main Menu");
+            SceneUILayoutHelper.SetButtonLabel(debugRewardButton, "Debug Reward");
         }
 
         private void ApplyLayout()
@@ -218,6 +218,19 @@ namespace DiceRogue
             }
 
             ApplyLayout();
+        }
+
+        private string BuildPlayerOverviewText()
+        {
+            var player = runManager != null ? runManager.PlayerState : null;
+            if (player == null)
+            {
+                return "Player";
+            }
+
+            return player.IsBerserkActive
+                ? $"Player HP {player.CurrentHp}/{player.MaxHp}  Shield {player.Shield}  Armor {player.Armor}  Rage {player.Rage}  Berserk {player.BerserkTurnsRemaining}t"
+                : $"Player HP {player.CurrentHp}/{player.MaxHp}  Shield {player.Shield}  Armor {player.Armor}  Rage {player.Rage}";
         }
     }
 }

@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using System.Linq;
 using UnityEngine;
 
 namespace DiceRogue
@@ -6,104 +7,219 @@ namespace DiceRogue
     public class BattleSystem
     {
         private readonly DiceSystem diceSystem;
+        private readonly SkillEffectExecutor skillEffectExecutor;
+        private readonly List<CombatantRuntimeState> enemies = new List<CombatantRuntimeState>(3);
 
         public BattleSystem(DiceSystem diceSystem)
         {
             this.diceSystem = diceSystem;
+            skillEffectExecutor = new SkillEffectExecutor();
         }
 
         public CombatantRuntimeState Player { get; private set; }
-        public CombatantRuntimeState Enemy { get; private set; }
+        public IReadOnlyList<CombatantRuntimeState> Enemies => enemies;
+        public CombatantRuntimeState Enemy => GetPrimaryEnemy();
         public int CurrentTurn { get; private set; }
         public int MaxTurns { get; private set; }
         public BattleResultType BattleResult { get; private set; } = BattleResultType.Ongoing;
         public bool IsFinished => BattleResult != BattleResultType.Ongoing;
+        public bool EnableDebugLogging { get; set; } = true;
 
         public void BeginBattle(CombatantRuntimeState playerState, CombatantTemplate enemyTemplate, int maxTurns)
         {
+            BeginBattle(playerState, enemyTemplate != null ? new[] { enemyTemplate } : System.Array.Empty<CombatantTemplate>(), maxTurns);
+        }
+
+        public void BeginBattle(CombatantRuntimeState playerState, EncounterDefinition encounterDefinition, int maxTurns)
+        {
+            BeginBattle(playerState, encounterDefinition?.EnemyTemplates ?? System.Array.Empty<CombatantTemplate>(), maxTurns);
+        }
+
+        public void BeginBattle(CombatantRuntimeState playerState, IReadOnlyList<CombatantTemplate> enemyTemplates, int maxTurns)
+        {
             Player = playerState;
-            Enemy = new CombatantRuntimeState(enemyTemplate);
-            MaxTurns = 0;
+            enemies.Clear();
+            MaxTurns = Mathf.Max(0, maxTurns);
             CurrentTurn = 0;
             BattleResult = BattleResultType.Ongoing;
 
+            if (Player == null)
+            {
+                BattleResult = BattleResultType.Defeat;
+                return;
+            }
+
             Player.ResetForBattle(false);
-            Enemy.ResetForBattle(true);
+
+            foreach (var enemyTemplate in enemyTemplates ?? System.Array.Empty<CombatantTemplate>())
+            {
+                if (enemyTemplate == null)
+                {
+                    continue;
+                }
+
+                var enemyState = new CombatantRuntimeState(enemyTemplate);
+                enemyState.ResetForBattle(true);
+                enemies.Add(enemyState);
+            }
+
+            if (enemies.Count == 0)
+            {
+                BattleResult = BattleResultType.Victory;
+                LogLine("[Battle] No enemies were configured. Battle ends immediately.");
+                return;
+            }
+
+            LogLine($"[Battle] {Player.DisplayName} vs {string.Join(", ", enemies.Select(enemy => enemy.DisplayName))} started.");
         }
 
         public BattleTurnReport ResolveNextTurn()
         {
             var report = new BattleTurnReport();
 
-            if (IsFinished || Player == null || Enemy == null)
+            if (IsFinished || Player == null)
             {
                 report.BattleResult = BattleResult;
-                report.LogLines.Add("전투가 이미 종료되었습니다.");
+                report.LogLines.Add("Battle is already finished.");
                 return report;
             }
 
             CurrentTurn += 1;
             report.TurnNumber = CurrentTurn;
 
+            var turnOrder = BuildTurnOrder();
+            var remainingActions = new Dictionary<CombatantRuntimeState, int>();
+            var seenFaces = new Dictionary<CombatantRuntimeState, HashSet<int>>();
+
             Player.BeginTurn();
-            Enemy.BeginTurn();
-
-            report.LogLines.Add($"턴 {CurrentTurn}");
-            report.LogLines.Add("턴 시작과 함께 방어도와 방어력이 초기화되었습니다.");
-
-            if (Player.IsBerserkActive)
+            foreach (var enemy in GetActiveEnemies())
             {
-                report.LogLines.Add($"{Player.DisplayName}이(가) 광분 상태입니다.");
+                enemy.BeginTurn();
             }
 
-            if (Enemy.IsBerserkActive)
-            {
-                report.LogLines.Add($"{Enemy.DisplayName}이(가) 광분 상태입니다.");
-            }
+            report.LogLines.Add($"Turn {CurrentTurn}");
+            report.LogLines.Add("Shield and Armor are reset at the start of the turn.");
 
-            var playerRemainingActions = Player.GetTurnDicePoints(Player.ConsumeTurnDicePointModifier());
-            var enemyRemainingActions = Enemy.GetTurnDicePoints(Enemy.ConsumeTurnDicePointModifier());
-            var playerSeenFaces = new HashSet<int>();
-            var enemySeenFaces = new HashSet<int>();
-
-            while ((playerRemainingActions > 0 || enemyRemainingActions > 0) && Player.IsAlive && Enemy.IsAlive)
+            foreach (var combatant in turnOrder)
             {
-                if (playerRemainingActions > 0 && Player.IsAlive && Enemy.IsAlive)
+                remainingActions[combatant] = combatant.GetTurnDicePoints(combatant.ConsumeTurnDicePointModifier());
+                seenFaces[combatant] = new HashSet<int>();
+                report.LogLines.Add($"{combatant.DisplayName} DP {remainingActions[combatant]}");
+                report.TurnOrderEntries.Add($"{combatant.DisplayName} ({remainingActions[combatant]} DP)");
+
+                if (ReferenceEquals(combatant, Player))
                 {
-                    playerRemainingActions -= 1;
-                    playerRemainingActions += ResolveAction(Player, Enemy, report, playerSeenFaces, true);
+                    report.PlayerTurnDicePoints = remainingActions[combatant];
                 }
 
-                if (enemyRemainingActions > 0 && Player.IsAlive && Enemy.IsAlive)
+                if (combatant.IsBerserkActive)
                 {
-                    enemyRemainingActions -= 1;
-                    enemyRemainingActions += ResolveAction(Enemy, Player, report, enemySeenFaces, false);
+                    report.LogLines.Add($"{combatant.DisplayName} is Berserk.");
+                }
+            }
+
+            while (Player.IsAlive && AreAnyEnemiesAlive() && HasRemainingActions(remainingActions))
+            {
+                foreach (var combatant in turnOrder)
+                {
+                    if (!Player.IsAlive || !AreAnyEnemiesAlive())
+                    {
+                        break;
+                    }
+
+                    if (!remainingActions.TryGetValue(combatant, out var actionsLeft) || actionsLeft <= 0 || !combatant.IsAlive)
+                    {
+                        continue;
+                    }
+
+                    remainingActions[combatant] = actionsLeft - 1;
+                    remainingActions[combatant] += ResolveAction(combatant, report, seenFaces[combatant], ReferenceEquals(combatant, Player));
                 }
             }
 
             Player.EndTurn();
-            Enemy.EndTurn();
-
-            if (!Enemy.IsAlive)
+            foreach (var enemy in enemies.Where(enemy => enemy != null && enemy.IsAlive))
             {
-                BattleResult = BattleResultType.Victory;
+                enemy.EndTurn();
             }
-            else if (!Player.IsAlive)
+
+            if (!Player.IsAlive)
             {
                 BattleResult = BattleResultType.Defeat;
             }
+            else if (!AreAnyEnemiesAlive())
+            {
+                BattleResult = BattleResultType.Victory;
+            }
+
+            if (IsFinished)
+            {
+                Player.ResetTemporaryCombatState();
+                foreach (var enemy in enemies)
+                {
+                    enemy?.ResetTemporaryCombatState();
+                }
+
+                report.LogLines.Add(BattleResult == BattleResultType.Victory
+                    ? $"{Player.DisplayName} wins the battle."
+                    : $"{Player.DisplayName} is defeated.");
+            }
 
             report.BattleResult = BattleResult;
+            LogReport(report);
             return report;
+        }
+
+        public int SummonEnemies(
+            CombatantRuntimeState summoner,
+            CombatantTemplate summonTemplate,
+            int summonCount,
+            int maxSummonedAllies,
+            BattleTurnReport report)
+        {
+            if (summoner == null || summonTemplate == null || summonCount <= 0 || ReferenceEquals(summoner, Player))
+            {
+                return 0;
+            }
+
+            var currentSummonCount = enemies.Count(enemy =>
+                enemy != null &&
+                enemy.IsAlive &&
+                enemy.IsSummoned &&
+                enemy.SummonerId == summoner.Template.Id);
+
+            var allowedSummons = Mathf.Max(0, maxSummonedAllies - currentSummonCount);
+            var actualSummons = Mathf.Min(Mathf.Max(1, summonCount), allowedSummons);
+
+            for (var index = 0; index < actualSummons; index++)
+            {
+                var summonedEnemy = new CombatantRuntimeState(summonTemplate);
+                summonedEnemy.MarkAsSummoned(summoner.Template.Id);
+                summonedEnemy.ResetForBattle(true);
+                summonedEnemy.MarkAsSummoned(summoner.Template.Id);
+                enemies.Add(summonedEnemy);
+            }
+
+            if (actualSummons > 0)
+            {
+                report?.LogLines.Add($"{summoner.DisplayName} summons {summonTemplate.DisplayName} x{actualSummons}.");
+            }
+
+            return actualSummons;
+        }
+
+        public int NextRandomIndex(int count)
+        {
+            return diceSystem.NextIndex(count);
         }
 
         private int ResolveAction(
             CombatantRuntimeState actor,
-            CombatantRuntimeState target,
             BattleTurnReport report,
             HashSet<int> seenFaces,
             bool isPlayerActor)
         {
+            report.CurrentActingUnitName = actor != null ? actor.DisplayName : string.Empty;
             var face = diceSystem.RollFace(actor);
             if (face?.Skill == null || !actor.IsAlive)
             {
@@ -132,28 +248,21 @@ namespace DiceRogue
                 RepeatCount = face.RepeatCount
             };
 
-            report.LogLines.Add($"{actor.DisplayName}이(가) {face.Skill.DisplayName}을(를) 사용했습니다.");
+            report.LogLines.Add($"{actor.DisplayName} uses {face.Skill.DisplayName}.");
 
-            switch (face.Skill.ActionType)
-            {
-                case SkillActionType.Attack:
-                    ResolveAttackAction(actor, target, face, actionResult, report);
-                    break;
-                case SkillActionType.Defense:
-                    ResolveDefenseAction(actor, face, actionResult, report);
-                    break;
-                case SkillActionType.Buff:
-                    ResolveBuffAction(actor, face, actionResult, report);
-                    break;
-                case SkillActionType.Debuff:
-                    ResolveDebuffAction(actor, target, face, actionResult, report);
-                    break;
-            }
+            skillEffectExecutor.Execute(
+                this,
+                actor,
+                GetAllies(actor),
+                GetOpponents(actor),
+                face,
+                actionResult,
+                report);
 
             if (isFirstFaceThisTurn && face.BonusDicePointsOnFirstRoll > 0)
             {
                 actionResult.BonusDicePointsGranted = face.BonusDicePointsOnFirstRoll;
-                report.LogLines.Add($"{actor.DisplayName}이(가) 처음 나온 면 보너스로 DP {face.BonusDicePointsOnFirstRoll}을(를) 얻었습니다.");
+                report.LogLines.Add($"{actor.DisplayName} gains {face.BonusDicePointsOnFirstRoll} bonus DP from the first roll of this face.");
             }
 
             actionResult.ActorWasDefeated = !actor.IsAlive;
@@ -161,208 +270,61 @@ namespace DiceRogue
             return isFirstFaceThisTurn ? face.BonusDicePointsOnFirstRoll : 0;
         }
 
-        private void ResolveAttackAction(
-            CombatantRuntimeState actor,
-            CombatantRuntimeState target,
-            DiceFaceState face,
-            BattleActionResult actionResult,
-            BattleTurnReport report)
+        private List<CombatantRuntimeState> BuildTurnOrder()
         {
-            if (target == null || !target.IsAlive)
+            var turnOrder = new List<CombatantRuntimeState> { Player };
+            turnOrder.AddRange(GetActiveEnemies());
+            return turnOrder;
+        }
+
+        private IReadOnlyList<CombatantRuntimeState> GetAllies(CombatantRuntimeState actor)
+        {
+            if (ReferenceEquals(actor, Player))
             {
-                return;
+                return new[] { Player };
             }
 
-            var activatedBerserk = false;
-            var totalHpDamage = 0;
-            var totalReflectedDamage = 0;
+            return enemies.Where(enemy => enemy != null && enemy.IsAlive && !ReferenceEquals(enemy, actor)).ToList();
+        }
 
-            if (face.RageCostValue > 0)
+        private IReadOnlyList<CombatantRuntimeState> GetOpponents(CombatantRuntimeState actor)
+        {
+            if (ReferenceEquals(actor, Player))
             {
-                actor.SpendRage(face.RageCostValue);
-                actionResult.RageSpend = face.RageCostValue;
+                return GetActiveEnemies().ToList();
             }
 
-            if (face.SelfDamageValue > 0)
+            return Player != null && Player.IsAlive
+                ? new[] { Player }
+                : System.Array.Empty<CombatantRuntimeState>();
+        }
+
+        private IEnumerable<CombatantRuntimeState> GetActiveEnemies()
+        {
+            return enemies.Where(enemy => enemy != null && enemy.IsAlive);
+        }
+
+        private bool AreAnyEnemiesAlive()
+        {
+            return enemies.Any(enemy => enemy != null && enemy.IsAlive);
+        }
+
+        private CombatantRuntimeState GetPrimaryEnemy()
+        {
+            return enemies.FirstOrDefault(enemy => enemy != null && enemy.IsAlive) ?? enemies.FirstOrDefault(enemy => enemy != null);
+        }
+
+        private static bool HasRemainingActions(Dictionary<CombatantRuntimeState, int> remainingActions)
+        {
+            foreach (var pair in remainingActions)
             {
-                actor.LoseHpDirect(face.SelfDamageValue);
-                actionResult.SelfDamage = face.SelfDamageValue;
-            }
-
-            var attackDamage = face.AttackValue;
-            if (face.ShieldDamagePercent > 0)
-            {
-                attackDamage += Mathf.FloorToInt(actor.GetShieldValue() * (face.ShieldDamagePercent / 100f));
-            }
-
-            attackDamage += actor.GetAttackBonus();
-
-            if (face.Skill.ConsumeAllShield)
-            {
-                actionResult.ShieldConsumed = actor.GetShieldValue();
-                actor.ConsumeAllShield();
-            }
-
-            for (var repeatIndex = 0; repeatIndex < face.RepeatCount && actor.IsAlive && target.IsAlive; repeatIndex++)
-            {
-                var resolution = target.TakeAttack(Mathf.Max(0, attackDamage));
-                totalHpDamage += resolution.HpDamage;
-
-                actionResult.Targets.Add(new BattleTargetResult
+                if (pair.Key != null && pair.Key.IsAlive && pair.Value > 0)
                 {
-                    Target = target,
-                    TargetType = BattleActionTargetType.Enemy,
-                    RawDamage = resolution.RawDamage,
-                    DamageAfterArmor = resolution.DamageAfterArmor,
-                    ShieldBlocked = resolution.ShieldBlocked,
-                    HpDamage = resolution.HpDamage,
-                    WasDefeated = !target.IsAlive
-                });
-
-                report.LogLines.Add(
-                    $"{actor.DisplayName}의 공격 {resolution.RawDamage} → 방어력 적용 후 {resolution.DamageAfterArmor}, 방어도 {resolution.ShieldBlocked}, HP {resolution.HpDamage}.");
-
-                if (resolution.HpDamage > 0 && target.PassiveReflectPercent > 0)
-                {
-                    var reflectedDamage = Mathf.FloorToInt(resolution.HpDamage * (target.PassiveReflectPercent / 100f));
-                    if (reflectedDamage > 0)
-                    {
-                        actor.LoseHpDirect(reflectedDamage);
-                        totalReflectedDamage += reflectedDamage;
-                        report.LogLines.Add($"{target.DisplayName}이(가) 피해 {reflectedDamage}를 반사했습니다.");
-                    }
+                    return true;
                 }
             }
 
-            if (face.RageGainValue > 0)
-            {
-                activatedBerserk = actor.GainRage(face.RageGainValue);
-                actionResult.RageGain = face.RageGainValue;
-            }
-
-            var totalLifestealPercent = face.LifestealPercent + actor.BerserkLifestealPercent;
-            if (totalLifestealPercent > 0 && totalHpDamage > 0)
-            {
-                var healAmount = Mathf.FloorToInt(totalHpDamage * (totalLifestealPercent / 100f));
-                if (healAmount > 0)
-                {
-                    actor.Heal(healAmount);
-                    actionResult.HealAmount = healAmount;
-                    report.LogLines.Add($"{actor.DisplayName}이(가) 흡혈로 {healAmount} 회복했습니다.");
-                }
-            }
-
-            actionResult.ReflectedDamageTaken = totalReflectedDamage;
-            actionResult.ActivatedBerserk = activatedBerserk;
-        }
-
-        private void ResolveDefenseAction(
-            CombatantRuntimeState actor,
-            DiceFaceState face,
-            BattleActionResult actionResult,
-            BattleTurnReport report)
-        {
-            if (face.ShieldValue > 0)
-            {
-                actor.GainShield(face.ShieldValue);
-                actionResult.ShieldGain = face.ShieldValue;
-            }
-
-            if (face.ArmorValue > 0)
-            {
-                actor.GainArmor(face.ArmorValue);
-                actionResult.ArmorGain = face.ArmorValue;
-            }
-
-            if (face.NextTurnShieldValue > 0)
-            {
-                actor.QueueNextTurnShield(face.NextTurnShieldValue);
-                actionResult.NextTurnShieldGain = face.NextTurnShieldValue;
-            }
-
-            actionResult.Targets.Add(new BattleTargetResult
-            {
-                Target = actor,
-                TargetType = BattleActionTargetType.Self,
-                ShieldGain = face.ShieldValue,
-                ArmorGain = face.ArmorValue,
-                NextTurnShieldGain = face.NextTurnShieldValue
-            });
-
-            report.LogLines.Add(
-                $"{actor.DisplayName}이(가) 방어도 {face.ShieldValue}, 방어력 {face.ArmorValue}, 다음 턴 방어도 {face.NextTurnShieldValue}을(를) 얻었습니다.");
-        }
-
-        private void ResolveBuffAction(
-            CombatantRuntimeState actor,
-            DiceFaceState face,
-            BattleActionResult actionResult,
-            BattleTurnReport report)
-        {
-            if (face.RageGainValue > 0)
-            {
-                actionResult.RageGain = face.RageGainValue;
-                actionResult.ActivatedBerserk = actor.GainRage(face.RageGainValue);
-            }
-
-            if (face.AttackModifierValue != 0)
-            {
-                actor.ApplyNextTurnAttackModifier(face.AttackModifierValue);
-                actionResult.AttackModifier = face.AttackModifierValue;
-            }
-
-            if (face.DicePointModifierValue != 0)
-            {
-                actor.ApplyNextTurnDicePointModifier(face.DicePointModifierValue);
-                actionResult.DicePointModifier = face.DicePointModifierValue;
-            }
-
-            actionResult.Targets.Add(new BattleTargetResult
-            {
-                Target = actor,
-                TargetType = BattleActionTargetType.Self,
-                RageGain = face.RageGainValue,
-                AttackModifier = face.AttackModifierValue,
-                DicePointModifier = face.DicePointModifierValue
-            });
-
-            report.LogLines.Add($"{actor.DisplayName}이(가) 분노 {face.RageGainValue}을(를) 얻었습니다.");
-        }
-
-        private void ResolveDebuffAction(
-            CombatantRuntimeState actor,
-            CombatantRuntimeState target,
-            DiceFaceState face,
-            BattleActionResult actionResult,
-            BattleTurnReport report)
-        {
-            if (target == null || !target.IsAlive)
-            {
-                return;
-            }
-
-            if (face.AttackModifierValue != 0)
-            {
-                target.ApplyNextTurnAttackModifier(face.AttackModifierValue);
-                actionResult.AttackModifier = face.AttackModifierValue;
-            }
-
-            if (face.DicePointModifierValue != 0)
-            {
-                target.ApplyNextTurnDicePointModifier(face.DicePointModifierValue);
-                actionResult.DicePointModifier = face.DicePointModifierValue;
-            }
-
-            actionResult.Targets.Add(new BattleTargetResult
-            {
-                Target = target,
-                TargetType = BattleActionTargetType.Enemy,
-                AttackModifier = face.AttackModifierValue,
-                DicePointModifier = face.DicePointModifierValue
-            });
-
-            report.LogLines.Add(
-                $"{actor.DisplayName}이(가) {target.DisplayName}에게 다음 턴 공격 {face.AttackModifierValue}, DP {face.DicePointModifierValue} 효과를 남겼습니다.");
+            return false;
         }
 
         private static int FindFaceIndex(CombatantRuntimeState actor, DiceFaceState face)
@@ -376,6 +338,26 @@ namespace DiceRogue
             }
 
             return -1;
+        }
+
+        private void LogReport(BattleTurnReport report)
+        {
+            if (!EnableDebugLogging || report == null || report.LogLines.Count == 0)
+            {
+                return;
+            }
+
+            Debug.Log($"[Battle Turn {report.TurnNumber}]\n{report.GetJoinedLog()}");
+        }
+
+        private void LogLine(string message)
+        {
+            if (!EnableDebugLogging || string.IsNullOrWhiteSpace(message))
+            {
+                return;
+            }
+
+            Debug.Log(message);
         }
     }
 }
