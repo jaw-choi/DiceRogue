@@ -15,9 +15,13 @@ MonoBehaviour:
   id: player_knight
   displayName: Dice Knight
   maxHp: 32
-  startingArmor: 0
-  startingRage: 0
+  baseDicePoints: 1
+  passiveShieldPerTurn: 0
+  passiveReflectPercent: 0
   isBoss: 0
+  battleSprite: {fileID: 1164491237095090225, guid: 5a24861b87e4c5b4e81cd0ab02855f37, type: 3}
+  battleTint: {r: 1, g: 1, b: 1, a: 1}
+  diceLoadout: {fileID: 0}
   diceSkills:
   - {fileID: 11400000, guid: 55c003b81ac9f034a9fc9395d431e521, type: 2}
   - {fileID: 11400000, guid: e8ee01477400e1449bb4898960d117e0, type: 2}

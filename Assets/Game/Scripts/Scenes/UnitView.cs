@@ -32,6 +32,7 @@ namespace DiceRogue
 
         public CombatantRuntimeState BoundState { get; private set; }
         public RectTransform PopupAnchor => popupAnchor != null ? popupAnchor : (RectTransform)transform;
+        public RectTransform HitEffectAnchor => spriteImage != null ? spriteImage.rectTransform : PopupAnchor;
 
         private void Awake()
         {
@@ -297,6 +298,15 @@ namespace DiceRogue
             if (combatantState?.Template != null && combatantState.Template.BattleSprite != null)
             {
                 return combatantState.Template.BattleSprite;
+            }
+
+            if (combatantState?.Template != null)
+            {
+                var mappedSprite = MonsterSpriteLibrary.GetCombatantSprite(combatantState.Template.Id);
+                if (mappedSprite != null)
+                {
+                    return mappedSprite;
+                }
             }
 
             return fallbackSprite != null ? fallbackSprite : GetGeneratedFallbackSprite();

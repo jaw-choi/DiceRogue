@@ -1,6 +1,7 @@
 using System.Text;
 using TMPro;
 using UnityEngine;
+using UnityEngine.UI;
 
 namespace DiceRogue
 {
@@ -13,6 +14,15 @@ namespace DiceRogue
         [SerializeField] private TMP_Text enemyStatsText;
         [SerializeField] private TMP_Text currentDiceResultText;
         [SerializeField] private TMP_Text summaryText;
+        [SerializeField] private Image playerSkillIconImage;
+        [SerializeField] private Image enemySkillIconImage;
+        [SerializeField] private TMP_Text playerSkillTitleText;
+        [SerializeField] private TMP_Text playerSkillBodyText;
+        [SerializeField] private TMP_Text enemySkillTitleText;
+        [SerializeField] private TMP_Text enemySkillBodyText;
+        [SerializeField] private Image activeSkillIconImage;
+        [SerializeField] private TMP_Text activeSkillTitleText;
+        [SerializeField] private TMP_Text activeSkillBodyText;
 
         public void Configure(
             TMP_Text runtimeTurnInfoText,
@@ -21,7 +31,13 @@ namespace DiceRogue
             TMP_Text runtimePlayerStatsText,
             TMP_Text runtimeEnemyStatsText,
             TMP_Text runtimeCurrentDiceResultText,
-            TMP_Text runtimeSummaryText)
+            TMP_Text runtimeSummaryText,
+            Image runtimePlayerSkillIconImage,
+            Image runtimeEnemySkillIconImage,
+            TMP_Text runtimePlayerSkillTitleText,
+            TMP_Text runtimePlayerSkillBodyText,
+            TMP_Text runtimeEnemySkillTitleText,
+            TMP_Text runtimeEnemySkillBodyText)
         {
             turnInfoText = runtimeTurnInfoText;
             actingUnitText = runtimeActingUnitText;
@@ -30,6 +46,22 @@ namespace DiceRogue
             enemyStatsText = runtimeEnemyStatsText;
             currentDiceResultText = runtimeCurrentDiceResultText;
             summaryText = runtimeSummaryText;
+            playerSkillIconImage = runtimePlayerSkillIconImage;
+            enemySkillIconImage = runtimeEnemySkillIconImage;
+            playerSkillTitleText = runtimePlayerSkillTitleText;
+            playerSkillBodyText = runtimePlayerSkillBodyText;
+            enemySkillTitleText = runtimeEnemySkillTitleText;
+            enemySkillBodyText = runtimeEnemySkillBodyText;
+        }
+
+        public void ConfigureSharedSkillCard(
+            Image runtimeActiveSkillIconImage,
+            TMP_Text runtimeActiveSkillTitleText,
+            TMP_Text runtimeActiveSkillBodyText)
+        {
+            activeSkillIconImage = runtimeActiveSkillIconImage;
+            activeSkillTitleText = runtimeActiveSkillTitleText;
+            activeSkillBodyText = runtimeActiveSkillBodyText;
         }
 
         public void Refresh(BattleSystem battleSystem, BattleTurnReport latestReport = null, string currentActorName = null)
@@ -76,6 +108,9 @@ namespace DiceRogue
                 currentDiceResultText.text = BuildDiceResultText(latestReport);
             }
 
+            RefreshSplitSkillCards(latestReport);
+            RefreshActiveSkillCard(battleSystem, latestReport, currentActorName);
+
             if (summaryText != null && latestReport != null)
             {
                 summaryText.text = latestReport.GetJoinedLog();
@@ -88,6 +123,65 @@ namespace DiceRogue
             {
                 summaryText.text = text;
             }
+        }
+
+        private void RefreshSplitSkillCards(BattleTurnReport latestReport)
+        {
+            RuntimeSkillCardFactory.ApplySkillPresentation(
+                playerSkillIconImage,
+                playerSkillTitleText,
+                playerSkillBodyText,
+                latestReport?.PlayerFace,
+                "Player Skill",
+                "Player Skill",
+                "Resolve a turn to see the current player skill.");
+            RuntimeSkillCardFactory.ApplySkillPresentation(
+                enemySkillIconImage,
+                enemySkillTitleText,
+                enemySkillBodyText,
+                latestReport?.EnemyFace,
+                "Enemy Skill",
+                "Enemy Skill",
+                "Resolve a turn to see the current enemy skill.");
+        }
+
+        private void RefreshActiveSkillCard(BattleSystem battleSystem, BattleTurnReport latestReport, string currentActorName)
+        {
+            if (activeSkillIconImage == null && activeSkillTitleText == null && activeSkillBodyText == null)
+            {
+                return;
+            }
+
+            var isEnemyTurn = IsEnemySkillFocused(battleSystem, latestReport, currentActorName);
+            RuntimeSkillCardFactory.ApplySkillPresentation(
+                activeSkillIconImage,
+                activeSkillTitleText,
+                activeSkillBodyText,
+                isEnemyTurn ? latestReport?.EnemyFace : latestReport?.PlayerFace,
+                isEnemyTurn ? "Enemy Skill" : "Player Skill",
+                isEnemyTurn ? "Enemy Skill" : "Player Skill",
+                isEnemyTurn
+                    ? "Enemy turn will show the enemy skill here."
+                    : "Player turn will show the player skill here.");
+        }
+
+        private static bool IsEnemySkillFocused(BattleSystem battleSystem, BattleTurnReport latestReport, string currentActorName)
+        {
+            if (!string.IsNullOrWhiteSpace(currentActorName) && battleSystem?.Player != null)
+            {
+                return !string.Equals(currentActorName, battleSystem.Player.DisplayName, System.StringComparison.Ordinal);
+            }
+
+            if (latestReport != null && latestReport.ActionResults.Count > 0 && battleSystem?.Player != null)
+            {
+                var lastAction = latestReport.ActionResults[latestReport.ActionResults.Count - 1];
+                if (lastAction?.Actor != null)
+                {
+                    return lastAction.Actor != battleSystem.Player;
+                }
+            }
+
+            return latestReport?.EnemyFace != null && latestReport.PlayerFace == null;
         }
 
         private static string BuildPlayerStatsText(CombatantRuntimeState player, BattleTurnReport latestReport)

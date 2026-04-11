@@ -1,3 +1,5 @@
+using System.Collections.Generic;
+using System.Linq;
 using UnityEngine;
 using UnityEngine.UI;
 using TMPro;
@@ -177,9 +179,14 @@ namespace DiceRogue
             return rectTransform;
         }
 
-        public static void Stretch(RectTransform rectTransform, float left = 0f, float right = 0f, float top = 0f, float bottom = 0f)
+        public static void Stretch(RectTransform rectTransform, float left = 0f, float right = 0f, float top = 0f, float bottom = 0f, bool preserveExistingLayout = false)
         {
             if (rectTransform == null)
+            {
+                return;
+            }
+
+            if (preserveExistingLayout && HasMeaningfulExistingLayout(rectTransform))
             {
                 return;
             }
@@ -209,6 +216,82 @@ namespace DiceRogue
             rectTransform.localRotation = Quaternion.identity;
         }
 
+        public static void SetRect(
+            RectTransform rectTransform,
+            Vector2 anchorMin,
+            Vector2 anchorMax,
+            Vector2 pivot,
+            Vector2 anchoredPosition,
+            Vector2 sizeDelta,
+            bool preserveExistingLayout)
+        {
+            if (rectTransform == null)
+            {
+                return;
+            }
+
+            if (preserveExistingLayout && HasMeaningfulExistingLayout(rectTransform))
+            {
+                return;
+            }
+
+            SetRect(rectTransform, anchorMin, anchorMax, pivot, anchoredPosition, sizeDelta);
+        }
+
+        public static Vector2 ResolveRectSize(RectTransform rectTransform, Vector2 fallbackSize)
+        {
+            if (rectTransform == null)
+            {
+                return fallbackSize;
+            }
+
+            var rectSize = rectTransform.rect.size;
+            if (rectSize.x > 0.01f && rectSize.y > 0.01f)
+            {
+                return rectSize;
+            }
+
+            return rectTransform.sizeDelta.x > 0.01f && rectTransform.sizeDelta.y > 0.01f
+                ? rectTransform.sizeDelta
+                : fallbackSize;
+        }
+
+        private static bool HasMeaningfulExistingLayout(RectTransform rectTransform)
+        {
+            if (rectTransform == null)
+            {
+                return false;
+            }
+
+            if (Mathf.Abs(rectTransform.sizeDelta.x) > 0.01f || Mathf.Abs(rectTransform.sizeDelta.y) > 0.01f)
+            {
+                return true;
+            }
+
+            if (rectTransform.anchoredPosition.sqrMagnitude > 0.01f)
+            {
+                return true;
+            }
+
+            var centeredAnchor = new Vector2(0.5f, 0.5f);
+            if ((rectTransform.anchorMin - centeredAnchor).sqrMagnitude > 0.0001f || (rectTransform.anchorMax - centeredAnchor).sqrMagnitude > 0.0001f)
+            {
+                return true;
+            }
+
+            if ((rectTransform.pivot - centeredAnchor).sqrMagnitude > 0.0001f)
+            {
+                return true;
+            }
+
+            if ((rectTransform.localScale - Vector3.one).sqrMagnitude > 0.0001f)
+            {
+                return true;
+            }
+
+            return Quaternion.Angle(rectTransform.localRotation, Quaternion.identity) > 0.01f;
+        }
+
         public static void StyleText(TMP_Text text, float fontSize, TextAlignmentOptions alignment, FontStyles fontStyle = FontStyles.Normal)
         {
             if (text == null)
@@ -228,7 +311,7 @@ namespace DiceRogue
             text.raycastTarget = false;
         }
 
-        public static void StyleButton(Button button, Vector2 size, float labelFontSize, Color backgroundColor, Color labelColor)
+        public static void StyleButton(Button button, Vector2 size, float labelFontSize, Color backgroundColor, Color labelColor, bool preserveExistingLayout = false)
         {
             if (button == null)
             {
@@ -237,23 +320,29 @@ namespace DiceRogue
 
             if (button.transform is RectTransform rectTransform)
             {
-                rectTransform.sizeDelta = size;
-                rectTransform.localScale = Vector3.one;
-                rectTransform.localRotation = Quaternion.identity;
+                if (!preserveExistingLayout || !HasMeaningfulExistingLayout(rectTransform))
+                {
+                    rectTransform.sizeDelta = size;
+                    rectTransform.localScale = Vector3.one;
+                    rectTransform.localRotation = Quaternion.identity;
+                }
             }
 
             var layoutElement = button.GetComponent<LayoutElement>();
-            if (layoutElement == null)
+            if (!preserveExistingLayout || layoutElement == null)
             {
-                layoutElement = button.gameObject.AddComponent<LayoutElement>();
-            }
+                layoutElement ??= button.gameObject.AddComponent<LayoutElement>();
 
-            layoutElement.minWidth = size.x;
-            layoutElement.preferredWidth = size.x;
-            layoutElement.minHeight = size.y;
-            layoutElement.preferredHeight = size.y;
-            layoutElement.flexibleWidth = 0f;
-            layoutElement.flexibleHeight = 0f;
+                if (!preserveExistingLayout)
+                {
+                    layoutElement.minWidth = size.x;
+                    layoutElement.preferredWidth = size.x;
+                    layoutElement.minHeight = size.y;
+                    layoutElement.preferredHeight = size.y;
+                    layoutElement.flexibleWidth = 0f;
+                    layoutElement.flexibleHeight = 0f;
+                }
+            }
 
             var image = button.targetGraphic as Image;
             if (image != null)
@@ -267,13 +356,16 @@ namespace DiceRogue
             {
                 if (label.transform is RectTransform labelRect)
                 {
-                    labelRect.anchorMin = Vector2.zero;
-                    labelRect.anchorMax = Vector2.one;
-                    labelRect.pivot = new Vector2(0.5f, 0.5f);
-                    labelRect.offsetMin = new Vector2(24f, 12f);
-                    labelRect.offsetMax = new Vector2(-24f, -12f);
-                    labelRect.localScale = Vector3.one;
-                    labelRect.localRotation = Quaternion.identity;
+                    if (!preserveExistingLayout || !HasMeaningfulExistingLayout(labelRect))
+                    {
+                        labelRect.anchorMin = Vector2.zero;
+                        labelRect.anchorMax = Vector2.one;
+                        labelRect.pivot = new Vector2(0.5f, 0.5f);
+                        labelRect.offsetMin = new Vector2(24f, 12f);
+                        labelRect.offsetMax = new Vector2(-24f, -12f);
+                        labelRect.localScale = Vector3.one;
+                        labelRect.localRotation = Quaternion.identity;
+                    }
                 }
 
                 StyleText(label, labelFontSize, TextAlignmentOptions.Center, FontStyles.Bold);
@@ -297,18 +389,16 @@ namespace DiceRogue
             }
         }
 
-        public static Image EnsureFullscreenImage(Transform parent, string objectName, Color color, int siblingIndex = 0)
+        public static Image EnsureFullscreenImage(Transform parent, string objectName, Color color, int siblingIndex = 0, bool preserveExistingLayout = false)
         {
             var rectTransform = EnsureRuntimeRect(parent, objectName);
-            Stretch(rectTransform);
+            Stretch(rectTransform, preserveExistingLayout: preserveExistingLayout);
 
             var image = GetOrAddImage(rectTransform.gameObject);
             image.sprite = GetRuntimeWhiteSprite();
             image.type = Image.Type.Simple;
             image.color = color;
             image.raycastTarget = false;
-
-            rectTransform.SetSiblingIndex(Mathf.Max(0, siblingIndex));
             return image;
         }
 
@@ -320,17 +410,17 @@ namespace DiceRogue
             Vector2 pivot,
             Vector2 anchoredPosition,
             Vector2 sizeDelta,
-            Color color)
+            Color color,
+            bool preserveExistingLayout = false)
         {
             var rectTransform = EnsureRuntimeRect(parent, objectName);
-            SetRect(rectTransform, anchorMin, anchorMax, pivot, anchoredPosition, sizeDelta);
+            SetRect(rectTransform, anchorMin, anchorMax, pivot, anchoredPosition, sizeDelta, preserveExistingLayout);
 
             var image = GetOrAddImage(rectTransform.gameObject);
             image.sprite = GetRuntimeWhiteSprite();
             image.type = Image.Type.Simple;
             image.color = color;
             image.raycastTarget = false;
-            rectTransform.SetSiblingIndex(Mathf.Min(1, rectTransform.parent.childCount - 1));
             return image;
         }
 
@@ -398,6 +488,349 @@ namespace DiceRogue
             }
 
             return runtimeWhiteSprite;
+        }
+    }
+
+    public static class SkillIconLibrary
+    {
+        private const string SkillIconResourcePath = "skill_icon";
+
+        private static readonly Dictionary<string, int> IconIndexBySkillId = new Dictionary<string, int>
+        {
+            { "basic_attack", 0 },
+            { "heavy_slash", 0 },
+            { "guard", 1 },
+            { "focused_defense", 2 },
+            { "fortify", 2 },
+            { "defensive_stance", 3 },
+            { "counter", 4 },
+            { "shield_burst", 5 },
+            { "blood_slash", 6 },
+            { "rage_burst", 7 },
+            { "fury", 7 },
+            { "savage_strike", 8 },
+            { "vampiric_slash", 9 }
+        };
+
+        private static Dictionary<string, Sprite> spritesByName;
+
+        public static Sprite GetSkillIcon(SkillDefinition skill)
+        {
+            return skill == null ? null : GetSkillIcon(skill.Id);
+        }
+
+        public static Sprite GetSkillIcon(string skillId)
+        {
+            if (string.IsNullOrWhiteSpace(skillId))
+            {
+                return null;
+            }
+
+            EnsureLoaded();
+            if (!IconIndexBySkillId.TryGetValue(skillId, out var iconIndex))
+            {
+                return null;
+            }
+
+            return spritesByName != null && spritesByName.TryGetValue($"skill_icon_{iconIndex}", out var sprite)
+                ? sprite
+                : null;
+        }
+
+        private static void EnsureLoaded()
+        {
+            if (spritesByName != null)
+            {
+                return;
+            }
+
+            spritesByName = Resources.LoadAll<Sprite>(SkillIconResourcePath)
+                .GroupBy(sprite => sprite.name)
+                .ToDictionary(group => group.Key, group => group.First());
+        }
+    }
+
+    public static class MonsterSpriteLibrary
+    {
+        private const string MonsterResourcePath = "monster";
+
+        private static readonly Dictionary<string, string> SpriteNameByCombatantId = new Dictionary<string, string>
+        {
+            { "slime", "monster_1" },
+            { "goblin", "monster_2" },
+            { "summoned_goblin", "monster_2" },
+            { "golem", "monster_3" },
+            { "shaman", "monster_4" }
+        };
+
+        private static Dictionary<string, Sprite> spritesByName;
+
+        public static Sprite GetBattlefieldSprite()
+        {
+            return GetSpriteByName("monster_0");
+        }
+
+        public static Sprite GetCombatantSprite(string combatantId)
+        {
+            if (string.IsNullOrWhiteSpace(combatantId))
+            {
+                return null;
+            }
+
+            return !SpriteNameByCombatantId.TryGetValue(combatantId, out var spriteName)
+                ? null
+                : GetSpriteByName(spriteName);
+        }
+
+        private static Sprite GetSpriteByName(string spriteName)
+        {
+            if (string.IsNullOrWhiteSpace(spriteName))
+            {
+                return null;
+            }
+
+            EnsureLoaded();
+            return spritesByName != null && spritesByName.TryGetValue(spriteName, out var sprite)
+                ? sprite
+                : null;
+        }
+
+        private static void EnsureLoaded()
+        {
+            if (spritesByName != null)
+            {
+                return;
+            }
+
+            spritesByName = Resources.LoadAll<Sprite>(MonsterResourcePath)
+                .GroupBy(sprite => sprite.name)
+                .ToDictionary(group => group.Key, group => group.First());
+        }
+    }
+
+    public static class UiFrameSpriteLibrary
+    {
+        private const string UiResourcePath = "UI";
+
+        private static Dictionary<string, Sprite> spritesByName;
+
+        public static Sprite GetTopHudSprite()
+        {
+            return GetSpriteByName("UI_0");
+        }
+
+        public static Sprite GetDicePanelSprite()
+        {
+            return GetSpriteByName("UI_1");
+        }
+
+        public static Sprite GetSkillDetailSprite()
+        {
+            return GetSpriteByName("UI_2");
+        }
+
+        public static Vector2 ResolveScaledSize(Sprite sprite, Vector2 scale, Vector2 extraSize)
+        {
+            if (sprite == null)
+            {
+                return extraSize;
+            }
+
+            return Vector2.Scale(sprite.rect.size, new Vector2(Mathf.Max(0.05f, scale.x), Mathf.Max(0.05f, scale.y))) + extraSize;
+        }
+
+        private static Sprite GetSpriteByName(string spriteName)
+        {
+            if (string.IsNullOrWhiteSpace(spriteName))
+            {
+                return null;
+            }
+
+            EnsureLoaded();
+            return spritesByName != null && spritesByName.TryGetValue(spriteName, out var sprite)
+                ? sprite
+                : null;
+        }
+
+        private static void EnsureLoaded()
+        {
+            if (spritesByName != null)
+            {
+                return;
+            }
+
+            spritesByName = Resources.LoadAll<Sprite>(UiResourcePath)
+                .GroupBy(sprite => sprite.name)
+                .ToDictionary(group => group.Key, group => group.First());
+        }
+    }
+
+    public sealed class RuntimeSkillCardView
+    {
+        public RectTransform Root;
+        public Image BackgroundImage;
+        public Image IconImage;
+        public TMP_Text TitleText;
+        public TMP_Text BodyText;
+    }
+
+    public static class RuntimeSkillCardFactory
+    {
+        public static RuntimeSkillCardView EnsureSkillCard(
+            Transform parent,
+            string objectName,
+            TMP_Text sampleText,
+            Vector2 anchoredPosition,
+            Vector2 size,
+            bool preserveExistingLayout = false)
+        {
+            var root = SceneUILayoutHelper.EnsureRuntimeRect(parent, objectName);
+            SceneUILayoutHelper.SetRect(root, new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), anchoredPosition, size, preserveExistingLayout);
+
+            var background = root.GetComponent<Image>() ?? root.gameObject.AddComponent<Image>();
+            background.sprite = UiFrameSpriteLibrary.GetSkillDetailSprite();
+            background.type = Image.Type.Simple;
+            background.color = Color.white;
+            background.preserveAspect = false;
+            background.raycastTarget = false;
+
+            var iconSize = Mathf.Min(size.y * 0.52f, size.x * 0.23f);
+            var iconRoot = SceneUILayoutHelper.EnsureRuntimeRect(root, "Icon");
+            SceneUILayoutHelper.SetRect(
+                iconRoot,
+                new Vector2(0.5f, 0.5f),
+                new Vector2(0.5f, 0.5f),
+                new Vector2(0.5f, 0.5f),
+                new Vector2(-size.x * 0.335f, 0f),
+                new Vector2(iconSize, iconSize),
+                preserveExistingLayout);
+            var iconImage = iconRoot.GetComponent<Image>() ?? iconRoot.gameObject.AddComponent<Image>();
+            iconImage.color = Color.white;
+            iconImage.preserveAspect = true;
+            iconImage.raycastTarget = false;
+
+            var titleRoot = SceneUILayoutHelper.EnsureRuntimeRect(root, "Title");
+            SceneUILayoutHelper.SetRect(
+                titleRoot,
+                new Vector2(0.5f, 0.5f),
+                new Vector2(0.5f, 0.5f),
+                new Vector2(0.5f, 0.5f),
+                new Vector2(size.x * 0.13f, size.y * 0.18f),
+                new Vector2(size.x * 0.56f, size.y * 0.23f),
+                preserveExistingLayout);
+            var titleText = titleRoot.GetComponent<TextMeshProUGUI>() ?? titleRoot.gameObject.AddComponent<TextMeshProUGUI>();
+            CopyFont(sampleText, titleText);
+            SceneUILayoutHelper.StyleText(titleText, 20f, TextAlignmentOptions.MidlineLeft, FontStyles.Bold);
+            titleText.color = new Color(0.16f, 0.12f, 0.05f, 1f);
+            titleText.textWrappingMode = TextWrappingModes.NoWrap;
+            titleText.overflowMode = TextOverflowModes.Ellipsis;
+
+            var bodyRoot = SceneUILayoutHelper.EnsureRuntimeRect(root, "Body");
+            SceneUILayoutHelper.SetRect(
+                bodyRoot,
+                new Vector2(0.5f, 0.5f),
+                new Vector2(0.5f, 0.5f),
+                new Vector2(0.5f, 0.5f),
+                new Vector2(size.x * 0.13f, -size.y * 0.05f),
+                new Vector2(size.x * 0.58f, size.y * 0.45f),
+                preserveExistingLayout);
+            var bodyText = bodyRoot.GetComponent<TextMeshProUGUI>() ?? bodyRoot.gameObject.AddComponent<TextMeshProUGUI>();
+            CopyFont(sampleText, bodyText);
+            SceneUILayoutHelper.StyleText(bodyText, 15f, TextAlignmentOptions.TopLeft, FontStyles.Normal);
+            bodyText.color = new Color(0.2f, 0.15f, 0.08f, 1f);
+            bodyText.textWrappingMode = TextWrappingModes.Normal;
+            bodyText.overflowMode = TextOverflowModes.Ellipsis;
+
+            return new RuntimeSkillCardView
+            {
+                Root = root,
+                BackgroundImage = background,
+                IconImage = iconImage,
+                TitleText = titleText,
+                BodyText = bodyText
+            };
+        }
+
+        public static void ApplySkillPresentation(
+            Image iconImage,
+            TMP_Text titleText,
+            TMP_Text bodyText,
+            DiceFaceState face,
+            string titlePrefix,
+            string emptyTitle,
+            string emptyBody)
+        {
+            var skill = face?.Skill;
+            var icon = SkillIconLibrary.GetSkillIcon(skill);
+            if (iconImage != null)
+            {
+                iconImage.sprite = icon;
+                iconImage.enabled = icon != null;
+                iconImage.preserveAspect = true;
+            }
+
+            if (skill == null)
+            {
+                if (titleText != null)
+                {
+                    titleText.text = emptyTitle;
+                }
+
+                if (bodyText != null)
+                {
+                    bodyText.text = emptyBody;
+                }
+
+                return;
+            }
+
+            if (titleText != null)
+            {
+                var levelLabel = face.UpgradeLevel > 0 ? $" Lv.{face.UpgradeLevel}" : string.Empty;
+                titleText.text = string.IsNullOrWhiteSpace(titlePrefix)
+                    ? $"{skill.DisplayName}{levelLabel}"
+                    : $"{titlePrefix} | {skill.DisplayName}{levelLabel}";
+            }
+
+            if (bodyText != null)
+            {
+                bodyText.text = BuildSkillBody(face);
+            }
+        }
+
+        private static string BuildSkillBody(DiceFaceState face)
+        {
+            var skill = face?.Skill;
+            if (skill == null)
+            {
+                return string.Empty;
+            }
+
+            var summary = skill.GetSummary(face.UpgradeLevel)?.Trim();
+            var description = skill.Description?.Trim();
+
+            if (string.IsNullOrWhiteSpace(description))
+            {
+                return summary;
+            }
+
+            if (string.IsNullOrWhiteSpace(summary) || string.Equals(summary, description))
+            {
+                return description;
+            }
+
+            return $"{summary}\n{description}";
+        }
+
+        private static void CopyFont(TMP_Text source, TMP_Text target)
+        {
+            if (source == null || target == null)
+            {
+                return;
+            }
+
+            target.font = source.font;
+            target.fontSharedMaterial = source.fontSharedMaterial;
         }
     }
 }

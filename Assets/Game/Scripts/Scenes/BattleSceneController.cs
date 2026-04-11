@@ -6,6 +6,7 @@ using UnityEngine.UI;
 
 namespace DiceRogue
 {
+    [ExecuteAlways]
     public class BattleSceneController : MonoBehaviour
     {
         [SerializeField] private RunConfig runConfig;
@@ -22,6 +23,12 @@ namespace DiceRogue
         [SerializeField] private Button debugKillButton;
         [SerializeField] private Button continueButton;
         [SerializeField] private Button backToMenuButton;
+        [Header("Battle Hit Effect")]
+        [SerializeField] private BattleHitEffectSettings battleHitEffectSettings = new BattleHitEffectSettings();
+        [Header("Battle Bottom UI Layout")]
+        [SerializeField] private BattleBottomUiLayoutSettings battleBottomUiLayout = new BattleBottomUiLayoutSettings();
+        [Header("Runtime Bottom UI Tuner")]
+        [SerializeField] private RuntimeBottomUiTunerSettings runtimeBottomUiTunerSettings = new RuntimeBottomUiTunerSettings();
 
         private static Sprite cachedUiSprite;
         private const float RuntimeTextScaleMultiplier = 1.5f;
@@ -29,9 +36,18 @@ namespace DiceRogue
         private GameRunManager runManager;
         private Coroutine autoBattleRoutine;
         private bool isResolvingPresentation;
+        private bool pendingRuntimeBottomUiRefresh;
+        private int lastBottomUiLayoutSignature;
+        private BottomUiTunerTarget bottomUiTunerTarget = BottomUiTunerTarget.BottomCard;
+        private RuntimeBottomUiTunerView runtimeBottomUiTunerView;
 
         private void Awake()
         {
+            if (!Application.isPlaying)
+            {
+                return;
+            }
+
             UIInputSystemHelper.EnsureEventSystem();
             runManager = GameRunManager.EnsureInstance(runConfig);
             runManager.EnsureDebugRunForScene();
@@ -85,6 +101,15 @@ namespace DiceRogue
 
         private void OnEnable()
         {
+            if (!Application.isPlaying)
+            {
+                EnsureRuntimePresentation();
+                ApplySceneLayoutIfEnabled();
+                RefreshRuntimeBottomUiTuner();
+                CacheRuntimeBottomUiSignature();
+                return;
+            }
+
             stateController?.Show(battleStateId);
             if (continueButton != null)
             {
@@ -96,15 +121,63 @@ namespace DiceRogue
             battlePresenter?.BindBattle(runManager.BattleSystem);
             battleHud?.Refresh(runManager.BattleSystem);
             RefreshAutoFlow();
+            CacheRuntimeBottomUiSignature();
         }
 
         private void OnDisable()
         {
+            if (!Application.isPlaying)
+            {
+                return;
+            }
+
             if (autoBattleRoutine != null)
             {
                 StopCoroutine(autoBattleRoutine);
                 autoBattleRoutine = null;
             }
+
+            pendingRuntimeBottomUiRefresh = false;
+        }
+
+        private void Update()
+        {
+            if (!Application.isPlaying)
+            {
+                if (!pendingRuntimeBottomUiRefresh)
+                {
+                    return;
+                }
+
+                pendingRuntimeBottomUiRefresh = false;
+                EnsureRuntimePresentation();
+                ApplySceneLayoutIfEnabled();
+                RefreshRuntimeBottomUiTuner();
+                CacheRuntimeBottomUiSignature();
+                return;
+            }
+
+            if (!pendingRuntimeBottomUiRefresh)
+            {
+                return;
+            }
+
+            pendingRuntimeBottomUiRefresh = false;
+            ApplyRuntimeBottomUiRefresh();
+        }
+
+        private void OnValidate()
+        {
+            if (!Application.isPlaying)
+            {
+                EnsureRuntimePresentation();
+                ApplySceneLayoutIfEnabled();
+                RefreshRuntimeBottomUiTuner();
+                CacheRuntimeBottomUiSignature();
+                return;
+            }
+
+            pendingRuntimeBottomUiRefresh = true;
         }
 
         private void OnAutoToggleChanged(bool isOn)
@@ -235,6 +308,7 @@ namespace DiceRogue
             battleHud = EnsureBattleHud(canvas);
             battlePresenter = EnsureBattlePresenter(canvas, battleHud);
             debugKillButton = EnsureDebugKillButton(canvas);
+            EnsureRuntimeBottomUiTuner(canvas);
         }
 
         private void ApplySceneLayout()
@@ -246,12 +320,23 @@ namespace DiceRogue
                 return;
             }
 
+            SyncBattleBottomLayoutFromExistingRects();
+
             SceneUILayoutHelper.EnsureFullscreenImage(canvas.transform, "RuntimeBattleBackdrop", new Color(0.07f, 0.1f, 0.17f, 1f));
             SceneUILayoutHelper.EnsurePanel(canvas.transform, "RuntimeBattleTopCard", new Vector2(0.5f, 1f), new Vector2(0.5f, 1f), new Vector2(0.5f, 1f), new Vector2(0f, -140f), new Vector2(980f, 470f), new Color(0.11f, 0.17f, 0.28f, 0.95f));
-            SceneUILayoutHelper.EnsurePanel(canvas.transform, "RuntimeBattleBottomCard", new Vector2(0.5f, 0f), new Vector2(0.5f, 0f), new Vector2(0.5f, 0f), new Vector2(0f, 150f), new Vector2(980f, 360f), new Color(0.12f, 0.18f, 0.3f, 0.94f));
+            SceneUILayoutHelper.EnsurePanel(
+                canvas.transform,
+                "RuntimeBattleBottomCard",
+                new Vector2(0.5f, 0f),
+                new Vector2(0.5f, 0f),
+                new Vector2(0.5f, 0f),
+                battleBottomUiLayout.BottomCardPosition,
+                battleBottomUiLayout.BottomCardSize,
+                new Color(0.12f, 0.18f, 0.3f, 0.94f));
 
             LayoutHudTexts();
             LayoutActionControls();
+            RefreshRuntimeBottomUiTuner();
         }
 
         private void LayoutHudTexts()
@@ -301,14 +386,26 @@ namespace DiceRogue
 
             if (rollLogText != null && rollLogText.transform is RectTransform rollRect)
             {
-                SceneUILayoutHelper.SetRect(rollRect, new Vector2(0.5f, 0f), new Vector2(0.5f, 0f), new Vector2(0.5f, 0f), new Vector2(0f, 300f), new Vector2(900f, 90f));
+                SceneUILayoutHelper.SetRect(
+                    rollRect,
+                    new Vector2(0.5f, 0f),
+                    new Vector2(0.5f, 0f),
+                    new Vector2(0.5f, 0f),
+                    battleBottomUiLayout.RollLogPosition,
+                    battleBottomUiLayout.RollLogSize);
                 SceneUILayoutHelper.StyleText(rollLogText, 18f, TextAlignmentOptions.Center, FontStyles.Bold);
                 rollLogText.color = new Color(0.88f, 0.93f, 1f, 1f);
             }
 
             if (battleLogText != null && battleLogText.transform is RectTransform logRect)
             {
-                SceneUILayoutHelper.SetRect(logRect, new Vector2(0.5f, 0f), new Vector2(0.5f, 0f), new Vector2(0.5f, 0f), new Vector2(0f, 172f), new Vector2(900f, 170f));
+                SceneUILayoutHelper.SetRect(
+                    logRect,
+                    new Vector2(0.5f, 0f),
+                    new Vector2(0.5f, 0f),
+                    new Vector2(0.5f, 0f),
+                    battleBottomUiLayout.BattleLogPosition,
+                    battleBottomUiLayout.BattleLogSize);
                 SceneUILayoutHelper.StyleText(battleLogText, 16f, TextAlignmentOptions.TopLeft);
                 battleLogText.color = new Color(0.86f, 0.92f, 0.98f, 1f);
             }
@@ -455,7 +552,35 @@ namespace DiceRogue
                 summaryText = CreateRuntimeText(runtimeRoot, "BattleLogText", sampleText, "Battle Log", 16f, FontStyles.Normal, TextAlignmentOptions.TopLeft, new Vector2(0f, -758f), new Vector2(900f, 170f));
             }
 
-            hud.Configure(turnText, actingUnitText, turnQueueText, playerStatsText, enemyStatsText, rollLogText, summaryText);
+            var playerSkillCard = RuntimeSkillCardFactory.EnsureSkillCard(
+                runtimeRoot,
+                "PlayerSkillCard",
+                sampleText,
+                battleBottomUiLayout.PlayerSkillCardPosition,
+                battleBottomUiLayout.PlayerSkillCardSize,
+                true);
+            var enemySkillCard = RuntimeSkillCardFactory.EnsureSkillCard(
+                runtimeRoot,
+                "EnemySkillCard",
+                sampleText,
+                battleBottomUiLayout.EnemySkillCardPosition,
+                battleBottomUiLayout.EnemySkillCardSize,
+                true);
+
+            hud.Configure(
+                turnText,
+                actingUnitText,
+                turnQueueText,
+                playerStatsText,
+                enemyStatsText,
+                rollLogText,
+                summaryText,
+                playerSkillCard.IconImage,
+                enemySkillCard.IconImage,
+                playerSkillCard.TitleText,
+                playerSkillCard.BodyText,
+                enemySkillCard.TitleText,
+                enemySkillCard.BodyText);
             return hud;
         }
 
@@ -481,7 +606,7 @@ namespace DiceRogue
             enemyView03.gameObject.SetActive(false);
 
             var floatingTextSpawner = EnsureFloatingTextSpawner(runtimeRoot, sampleText);
-            presenter.Configure(playerView, new[] { enemyView01, enemyView02, enemyView03 }, hud, floatingTextSpawner);
+            presenter.Configure(playerView, new[] { enemyView01, enemyView02, enemyView03 }, hud, floatingTextSpawner, canvas, battleHitEffectSettings);
             return presenter;
         }
 
@@ -717,6 +842,26 @@ namespace DiceRogue
             return rectTransform;
         }
 
+        private void SyncBattleBottomLayoutFromExistingRects()
+        {
+            SyncBattleBottomRect(ref battleBottomUiLayout.BottomCardPosition, ref battleBottomUiLayout.BottomCardSize, FindComponentByName<RectTransform>("RuntimeBattleBottomCard"));
+            SyncBattleBottomRect(ref battleBottomUiLayout.RollLogPosition, ref battleBottomUiLayout.RollLogSize, FindComponentByName<RectTransform>("RollLogText"));
+            SyncBattleBottomRect(ref battleBottomUiLayout.BattleLogPosition, ref battleBottomUiLayout.BattleLogSize, FindComponentByName<RectTransform>("BattleLogText"));
+            SyncBattleBottomRect(ref battleBottomUiLayout.PlayerSkillCardPosition, ref battleBottomUiLayout.PlayerSkillCardSize, FindComponentByName<RectTransform>("PlayerSkillCard"));
+            SyncBattleBottomRect(ref battleBottomUiLayout.EnemySkillCardPosition, ref battleBottomUiLayout.EnemySkillCardSize, FindComponentByName<RectTransform>("EnemySkillCard"));
+        }
+
+        private static void SyncBattleBottomRect(ref Vector2 anchoredPosition, ref Vector2 size, RectTransform rectTransform)
+        {
+            if (rectTransform == null)
+            {
+                return;
+            }
+
+            anchoredPosition = rectTransform.anchoredPosition;
+            size = SceneUILayoutHelper.ResolveRectSize(rectTransform, size);
+        }
+
         private static void SetAnchoredRect(RectTransform rectTransform, Vector2 anchoredPosition, Vector2 size)
         {
             rectTransform.anchorMin = new Vector2(0.5f, 0.5f);
@@ -743,6 +888,228 @@ namespace DiceRogue
             return component != null ? component : target.AddComponent<T>();
         }
 
+        private void EnsureRuntimeBottomUiTuner(Canvas canvas)
+        {
+            if (!useRuntimeLayout || useEditorUiLayout)
+            {
+                return;
+            }
+
+            if (!runtimeBottomUiTunerSettings.ShowRuntimeTuner)
+            {
+                if (runtimeBottomUiTunerView?.Root != null)
+                {
+                    runtimeBottomUiTunerView.Root.gameObject.SetActive(false);
+                }
+
+                return;
+            }
+
+            var root = GetOrCreateChildRect(canvas.transform as RectTransform, "RuntimeBattleBottomUiTuner");
+            SetAnchoredRect(root, runtimeBottomUiTunerSettings.PanelPosition, runtimeBottomUiTunerSettings.PanelSize);
+
+            var background = GetOrAddComponent<Image>(root.gameObject);
+            background.sprite = GetRuntimeWhiteSprite();
+            background.type = Image.Type.Simple;
+            background.color = new Color(0.08f, 0.12f, 0.2f, 0.9f);
+            background.raycastTarget = true;
+
+            var sampleText = FindFirstSceneText();
+            var title = CreateRuntimeText(root, "Title", sampleText, "Bottom UI Tuner", 14f, FontStyles.Bold, TextAlignmentOptions.Center, new Vector2(0f, 82f), new Vector2(220f, 32f));
+            title.color = Color.white;
+            var info = CreateRuntimeText(root, "Info", sampleText, string.Empty, 11f, FontStyles.Bold, TextAlignmentOptions.Center, new Vector2(0f, 38f), new Vector2(220f, 52f));
+            info.color = new Color(0.84f, 0.91f, 1f, 1f);
+
+            var targetButton = EnsureTunerButton(root, "TargetButton", "Target", new Vector2(0f, 0f), new Vector2(176f, 38f), new Color(0.2f, 0.42f, 0.72f));
+            var xMinus = EnsureTunerButton(root, "XMinusButton", "X-", new Vector2(-72f, -44f), new Vector2(58f, 34f), new Color(0.24f, 0.28f, 0.36f));
+            var xPlus = EnsureTunerButton(root, "XPlusButton", "X+", new Vector2(-8f, -44f), new Vector2(58f, 34f), new Color(0.24f, 0.28f, 0.36f));
+            var yMinus = EnsureTunerButton(root, "YMinusButton", "Y-", new Vector2(56f, -44f), new Vector2(58f, 34f), new Color(0.24f, 0.28f, 0.36f));
+            var yPlus = EnsureTunerButton(root, "YPlusButton", "Y+", new Vector2(120f, -44f), new Vector2(58f, 34f), new Color(0.24f, 0.28f, 0.36f));
+            var wMinus = EnsureTunerButton(root, "WMinusButton", "W-", new Vector2(-72f, -86f), new Vector2(58f, 34f), new Color(0.18f, 0.46f, 0.66f));
+            var wPlus = EnsureTunerButton(root, "WPlusButton", "W+", new Vector2(-8f, -86f), new Vector2(58f, 34f), new Color(0.18f, 0.46f, 0.66f));
+            var hMinus = EnsureTunerButton(root, "HMinusButton", "H-", new Vector2(56f, -86f), new Vector2(58f, 34f), new Color(0.18f, 0.46f, 0.66f));
+            var hPlus = EnsureTunerButton(root, "HPlusButton", "H+", new Vector2(120f, -86f), new Vector2(58f, 34f), new Color(0.18f, 0.46f, 0.66f));
+
+            BindTunerButton(targetButton, CycleBottomUiTunerTarget);
+            BindTunerButton(xMinus, () => AdjustBottomUiTarget(-runtimeBottomUiTunerSettings.PositionStep, 0f, 0f, 0f));
+            BindTunerButton(xPlus, () => AdjustBottomUiTarget(runtimeBottomUiTunerSettings.PositionStep, 0f, 0f, 0f));
+            BindTunerButton(yMinus, () => AdjustBottomUiTarget(0f, -runtimeBottomUiTunerSettings.PositionStep, 0f, 0f));
+            BindTunerButton(yPlus, () => AdjustBottomUiTarget(0f, runtimeBottomUiTunerSettings.PositionStep, 0f, 0f));
+            BindTunerButton(wMinus, () => AdjustBottomUiTarget(0f, 0f, -runtimeBottomUiTunerSettings.SizeStep, 0f));
+            BindTunerButton(wPlus, () => AdjustBottomUiTarget(0f, 0f, runtimeBottomUiTunerSettings.SizeStep, 0f));
+            BindTunerButton(hMinus, () => AdjustBottomUiTarget(0f, 0f, 0f, -runtimeBottomUiTunerSettings.SizeStep));
+            BindTunerButton(hPlus, () => AdjustBottomUiTarget(0f, 0f, 0f, runtimeBottomUiTunerSettings.SizeStep));
+
+            runtimeBottomUiTunerView = new RuntimeBottomUiTunerView
+            {
+                Root = root,
+                TitleText = title,
+                InfoText = info
+            };
+
+            RefreshRuntimeBottomUiTuner();
+        }
+
+        private Button EnsureTunerButton(RectTransform parent, string objectName, string labelText, Vector2 anchoredPosition, Vector2 size, Color backgroundColor)
+        {
+            var root = GetOrCreateChildRect(parent, objectName);
+            SetAnchoredRect(root, anchoredPosition, size);
+
+            var image = GetOrAddComponent<Image>(root.gameObject);
+            image.sprite = GetRuntimeWhiteSprite();
+            image.type = Image.Type.Simple;
+            image.color = backgroundColor;
+            image.raycastTarget = true;
+
+            var button = GetOrAddComponent<Button>(root.gameObject);
+            button.targetGraphic = image;
+
+            var sampleText = FindFirstSceneText();
+            var label = CreateRuntimeText(root, "Label", sampleText, labelText, 12f, FontStyles.Bold, TextAlignmentOptions.Center, Vector2.zero, size - new Vector2(10f, 6f));
+            label.color = Color.white;
+            return button;
+        }
+
+        private void RefreshRuntimeBottomUiTuner()
+        {
+            if (runtimeBottomUiTunerView == null)
+            {
+                return;
+            }
+
+            runtimeBottomUiTunerView.Root.gameObject.SetActive(runtimeBottomUiTunerSettings.ShowRuntimeTuner);
+            runtimeBottomUiTunerView.TitleText.text = $"Bottom UI | {bottomUiTunerTarget}";
+
+            var position = GetBottomUiTargetPosition();
+            var size = GetBottomUiTargetSize();
+            runtimeBottomUiTunerView.InfoText.text = $"Pos {position.x:0}/{position.y:0}\nSize {size.x:0}/{size.y:0}";
+        }
+
+        private void CycleBottomUiTunerTarget()
+        {
+            bottomUiTunerTarget = bottomUiTunerTarget == BottomUiTunerTarget.EnemySkillCard
+                ? BottomUiTunerTarget.BottomCard
+                : bottomUiTunerTarget + 1;
+            RefreshRuntimeBottomUiTuner();
+        }
+
+        private void AdjustBottomUiTarget(float deltaX, float deltaY, float deltaWidth, float deltaHeight)
+        {
+            switch (bottomUiTunerTarget)
+            {
+                case BottomUiTunerTarget.BottomCard:
+                    AdjustBottomUiRect(ref battleBottomUiLayout.BottomCardPosition, ref battleBottomUiLayout.BottomCardSize, deltaX, deltaY, deltaWidth, deltaHeight);
+                    break;
+                case BottomUiTunerTarget.RollLog:
+                    AdjustBottomUiRect(ref battleBottomUiLayout.RollLogPosition, ref battleBottomUiLayout.RollLogSize, deltaX, deltaY, deltaWidth, deltaHeight);
+                    break;
+                case BottomUiTunerTarget.BattleLog:
+                    AdjustBottomUiRect(ref battleBottomUiLayout.BattleLogPosition, ref battleBottomUiLayout.BattleLogSize, deltaX, deltaY, deltaWidth, deltaHeight);
+                    break;
+                case BottomUiTunerTarget.PlayerSkillCard:
+                    AdjustBottomUiRect(ref battleBottomUiLayout.PlayerSkillCardPosition, ref battleBottomUiLayout.PlayerSkillCardSize, deltaX, deltaY, deltaWidth, deltaHeight);
+                    break;
+                case BottomUiTunerTarget.EnemySkillCard:
+                    AdjustBottomUiRect(ref battleBottomUiLayout.EnemySkillCardPosition, ref battleBottomUiLayout.EnemySkillCardSize, deltaX, deltaY, deltaWidth, deltaHeight);
+                    break;
+            }
+
+            EnsureRuntimePresentation();
+            ApplySceneLayoutIfEnabled();
+            battlePresenter?.BindBattle(runManager.BattleSystem);
+            battleHud?.Refresh(runManager.BattleSystem);
+            RefreshRuntimeBottomUiTuner();
+        }
+
+        private static void AdjustBottomUiRect(ref Vector2 position, ref Vector2 size, float deltaX, float deltaY, float deltaWidth, float deltaHeight)
+        {
+            position += new Vector2(deltaX, deltaY);
+            size += new Vector2(deltaWidth, deltaHeight);
+            size = new Vector2(Mathf.Max(120f, size.x), Mathf.Max(40f, size.y));
+        }
+
+        private Vector2 GetBottomUiTargetPosition()
+        {
+            return bottomUiTunerTarget switch
+            {
+                BottomUiTunerTarget.BottomCard => battleBottomUiLayout.BottomCardPosition,
+                BottomUiTunerTarget.RollLog => battleBottomUiLayout.RollLogPosition,
+                BottomUiTunerTarget.BattleLog => battleBottomUiLayout.BattleLogPosition,
+                BottomUiTunerTarget.PlayerSkillCard => battleBottomUiLayout.PlayerSkillCardPosition,
+                BottomUiTunerTarget.EnemySkillCard => battleBottomUiLayout.EnemySkillCardPosition,
+                _ => Vector2.zero
+            };
+        }
+
+        private Vector2 GetBottomUiTargetSize()
+        {
+            return bottomUiTunerTarget switch
+            {
+                BottomUiTunerTarget.BottomCard => battleBottomUiLayout.BottomCardSize,
+                BottomUiTunerTarget.RollLog => battleBottomUiLayout.RollLogSize,
+                BottomUiTunerTarget.BattleLog => battleBottomUiLayout.BattleLogSize,
+                BottomUiTunerTarget.PlayerSkillCard => battleBottomUiLayout.PlayerSkillCardSize,
+                BottomUiTunerTarget.EnemySkillCard => battleBottomUiLayout.EnemySkillCardSize,
+                _ => Vector2.zero
+            };
+        }
+
+        private void ApplyRuntimeBottomUiRefresh()
+        {
+            var signature = GetBottomUiLayoutSignature();
+            if (signature == lastBottomUiLayoutSignature)
+            {
+                return;
+            }
+
+            EnsureRuntimePresentation();
+            ApplySceneLayoutIfEnabled();
+            battlePresenter?.BindBattle(runManager.BattleSystem);
+            battleHud?.Refresh(runManager.BattleSystem);
+            RefreshRuntimeBottomUiTuner();
+            lastBottomUiLayoutSignature = signature;
+        }
+
+        private void CacheRuntimeBottomUiSignature()
+        {
+            lastBottomUiLayoutSignature = GetBottomUiLayoutSignature();
+        }
+
+        private int GetBottomUiLayoutSignature()
+        {
+            unchecked
+            {
+                var hash = 17;
+                hash = (hash * 31) + battleBottomUiLayout.BottomCardPosition.GetHashCode();
+                hash = (hash * 31) + battleBottomUiLayout.BottomCardSize.GetHashCode();
+                hash = (hash * 31) + battleBottomUiLayout.RollLogPosition.GetHashCode();
+                hash = (hash * 31) + battleBottomUiLayout.RollLogSize.GetHashCode();
+                hash = (hash * 31) + battleBottomUiLayout.BattleLogPosition.GetHashCode();
+                hash = (hash * 31) + battleBottomUiLayout.BattleLogSize.GetHashCode();
+                hash = (hash * 31) + battleBottomUiLayout.PlayerSkillCardPosition.GetHashCode();
+                hash = (hash * 31) + battleBottomUiLayout.PlayerSkillCardSize.GetHashCode();
+                hash = (hash * 31) + battleBottomUiLayout.EnemySkillCardPosition.GetHashCode();
+                hash = (hash * 31) + battleBottomUiLayout.EnemySkillCardSize.GetHashCode();
+                hash = (hash * 31) + (runtimeBottomUiTunerSettings.ShowRuntimeTuner ? 1 : 0);
+                hash = (hash * 31) + runtimeBottomUiTunerSettings.PanelPosition.GetHashCode();
+                hash = (hash * 31) + runtimeBottomUiTunerSettings.PanelSize.GetHashCode();
+                hash = (hash * 31) + runtimeBottomUiTunerSettings.PositionStep.GetHashCode();
+                hash = (hash * 31) + runtimeBottomUiTunerSettings.SizeStep.GetHashCode();
+                return hash;
+            }
+        }
+
+        private static void BindTunerButton(Button button, UnityEngine.Events.UnityAction action)
+        {
+            if (button == null)
+            {
+                return;
+            }
+
+            button.onClick.RemoveAllListeners();
+            button.onClick.AddListener(action);
+        }
+
         private static Sprite GetRuntimeWhiteSprite()
         {
             if (cachedUiSprite == null)
@@ -767,6 +1134,47 @@ namespace DiceRogue
             }
 
             return cachedUiSprite;
+        }
+
+        [System.Serializable]
+        private sealed class BattleBottomUiLayoutSettings
+        {
+            public Vector2 BottomCardPosition = new Vector2(0f, 150f);
+            public Vector2 BottomCardSize = new Vector2(980f, 360f);
+            public Vector2 RollLogPosition = new Vector2(0f, 300f);
+            public Vector2 RollLogSize = new Vector2(900f, 90f);
+            public Vector2 BattleLogPosition = new Vector2(0f, 172f);
+            public Vector2 BattleLogSize = new Vector2(900f, 170f);
+            public Vector2 PlayerSkillCardPosition = new Vector2(-250f, -622f);
+            public Vector2 PlayerSkillCardSize = new Vector2(466f, 167f);
+            public Vector2 EnemySkillCardPosition = new Vector2(250f, -622f);
+            public Vector2 EnemySkillCardSize = new Vector2(466f, 167f);
+        }
+
+        [System.Serializable]
+        private sealed class RuntimeBottomUiTunerSettings
+        {
+            public bool ShowRuntimeTuner = true;
+            public Vector2 PanelPosition = new Vector2(-400f, -620f);
+            public Vector2 PanelSize = new Vector2(240f, 220f);
+            public float PositionStep = 16f;
+            public float SizeStep = 20f;
+        }
+
+        private enum BottomUiTunerTarget
+        {
+            BottomCard,
+            RollLog,
+            BattleLog,
+            PlayerSkillCard,
+            EnemySkillCard
+        }
+
+        private sealed class RuntimeBottomUiTunerView
+        {
+            public RectTransform Root;
+            public TMP_Text TitleText;
+            public TMP_Text InfoText;
         }
     }
 }

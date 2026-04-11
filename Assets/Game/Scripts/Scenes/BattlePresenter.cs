@@ -11,18 +11,62 @@ namespace DiceRogue
         [SerializeField] private UnitView[] enemyViews = new UnitView[3];
         [SerializeField] private BattleHUD battleHud;
         [SerializeField] private FloatingTextSpawner floatingTextSpawner;
+        [SerializeField] private BattleHitEffectSettings hitEffectSettings = new BattleHitEffectSettings();
         [SerializeField] private float preActionDelay = 0.08f;
         [SerializeField] private float betweenActionsDelay = 0.1f;
         [SerializeField] private float endTurnDelay = 0.15f;
 
         private readonly Dictionary<CombatantRuntimeState, UnitView> viewLookup = new Dictionary<CombatantRuntimeState, UnitView>();
+        private Canvas effectCanvas;
+        private Camera effectCamera;
 
         public void Configure(UnitView runtimePlayerView, UnitView[] runtimeEnemyViews, BattleHUD runtimeBattleHud, FloatingTextSpawner runtimeFloatingTextSpawner)
+        {
+            Configure(runtimePlayerView, runtimeEnemyViews, runtimeBattleHud, runtimeFloatingTextSpawner, null, null);
+        }
+
+        public void Configure(
+            UnitView runtimePlayerView,
+            UnitView[] runtimeEnemyViews,
+            BattleHUD runtimeBattleHud,
+            FloatingTextSpawner runtimeFloatingTextSpawner,
+            Canvas runtimeEffectCanvas,
+            BattleHitEffectSettings runtimeHitEffectSettings)
         {
             playerView = runtimePlayerView;
             enemyViews = runtimeEnemyViews ?? Array.Empty<UnitView>();
             battleHud = runtimeBattleHud;
             floatingTextSpawner = runtimeFloatingTextSpawner;
+            effectCanvas = runtimeEffectCanvas;
+            if (runtimeHitEffectSettings != null)
+            {
+                hitEffectSettings = runtimeHitEffectSettings;
+            }
+
+            PrepareHitEffectCanvas();
+        }
+
+        public void RefreshHitEffectSettings(Canvas runtimeEffectCanvas, BattleHitEffectSettings runtimeHitEffectSettings)
+        {
+            effectCanvas = runtimeEffectCanvas != null ? runtimeEffectCanvas : effectCanvas;
+            if (runtimeHitEffectSettings != null)
+            {
+                hitEffectSettings = runtimeHitEffectSettings;
+            }
+
+            PrepareHitEffectCanvas();
+        }
+
+        public void PreviewConfiguredHitEffect()
+        {
+            var previewTarget = GetPreviewTargetView();
+            var previewActor = GetPreviewActorView(previewTarget);
+            if (previewTarget == null || previewActor == null)
+            {
+                return;
+            }
+
+            SpawnHitEffect(previewActor, previewTarget);
         }
 
         public void BindBattle(BattleSystem battleSystem)
@@ -145,6 +189,7 @@ namespace DiceRogue
 
             if (primaryTargetView != null && primaryTargetResult != null)
             {
+                SpawnHitEffect(actorView, primaryTargetView);
                 yield return primaryTargetView.PlayHitReaction();
 
                 if (totalHpDamage > 0)
@@ -181,6 +226,115 @@ namespace DiceRogue
             }
 
             battleHud?.Refresh(battleSystem, report, actionResult.Actor != null ? actionResult.Actor.DisplayName : null);
+        }
+
+        private void PrepareHitEffectCanvas()
+        {
+            if (hitEffectSettings == null || hitEffectSettings.prefab == null)
+            {
+                return;
+            }
+
+            effectCanvas ??= SceneUILayoutHelper.FindRootCanvas();
+            if (effectCanvas == null)
+            {
+                return;
+            }
+
+            effectCamera = ResolveEffectCamera(effectCanvas);
+            if (effectCamera == null)
+            {
+                return;
+            }
+
+            effectCanvas.renderMode = RenderMode.ScreenSpaceCamera;
+            effectCanvas.worldCamera = effectCamera;
+            effectCanvas.planeDistance = Mathf.Max(effectCanvas.planeDistance, 100f);
+        }
+
+        private void SpawnHitEffect(UnitView actorView, UnitView targetView)
+        {
+            if (actorView?.HitEffectAnchor == null || targetView?.HitEffectAnchor == null || hitEffectSettings == null || hitEffectSettings.prefab == null)
+            {
+                return;
+            }
+
+            PrepareHitEffectCanvas();
+            var instance = Instantiate(
+                hitEffectSettings.prefab,
+                GetHitEffectSpawnPosition(actorView.HitEffectAnchor, targetView.HitEffectAnchor),
+                hitEffectSettings.prefab.transform.rotation);
+            instance.transform.localScale = hitEffectSettings.localScale;
+
+            var particleSystems = instance.GetComponentsInChildren<ParticleSystem>(true);
+            for (var index = 0; index < particleSystems.Length; index++)
+            {
+                particleSystems[index].Play(true);
+            }
+
+            var renderers = instance.GetComponentsInChildren<ParticleSystemRenderer>(true);
+            for (var index = 0; index < renderers.Length; index++)
+            {
+                renderers[index].sortingLayerID = effectCanvas != null ? effectCanvas.sortingLayerID : renderers[index].sortingLayerID;
+                renderers[index].sortingOrder = effectCanvas != null ? effectCanvas.sortingOrder + 10 : renderers[index].sortingOrder;
+            }
+
+            Destroy(instance, EstimateHitEffectLifetime(instance));
+        }
+
+        private Vector3 GetHitEffectSpawnPosition(RectTransform actorAnchor, RectTransform targetAnchor)
+        {
+            if (effectCanvas != null && effectCanvas.renderMode == RenderMode.ScreenSpaceCamera && effectCamera != null)
+            {
+                var actorScreenPoint = RectTransformUtility.WorldToScreenPoint(effectCamera, actorAnchor.position);
+                var targetScreenPoint = RectTransformUtility.WorldToScreenPoint(effectCamera, targetAnchor.position);
+                var screenPoint = Vector2.Lerp(actorScreenPoint, targetScreenPoint, Mathf.Clamp01(hitEffectSettings.impactLerpFromActorToTarget));
+                screenPoint += hitEffectSettings.screenOffset;
+                var distance = Mathf.Max(0.1f, effectCanvas.planeDistance - Mathf.Max(0f, hitEffectSettings.depthOffsetTowardsCamera));
+                return effectCamera.ScreenToWorldPoint(new Vector3(screenPoint.x, screenPoint.y, distance));
+            }
+
+            var worldPoint = Vector3.Lerp(actorAnchor.position, targetAnchor.position, Mathf.Clamp01(hitEffectSettings.impactLerpFromActorToTarget));
+            return worldPoint + new Vector3(hitEffectSettings.screenOffset.x * 0.01f, hitEffectSettings.screenOffset.y * 0.01f, 0f);
+        }
+
+        private float EstimateHitEffectLifetime(GameObject effectInstance)
+        {
+            if (hitEffectSettings.durationOverride > 0f)
+            {
+                return hitEffectSettings.durationOverride;
+            }
+
+            var maxDuration = 0.8f;
+            var particleSystems = effectInstance.GetComponentsInChildren<ParticleSystem>(true);
+            for (var index = 0; index < particleSystems.Length; index++)
+            {
+                var main = particleSystems[index].main;
+                var startDelay = main.startDelay;
+                var startLifetime = main.startLifetime;
+                var duration = main.duration + startDelay.constantMax + startLifetime.constantMax;
+                if (duration > maxDuration)
+                {
+                    maxDuration = duration;
+                }
+            }
+
+            return maxDuration + 0.2f;
+        }
+
+        private static Camera ResolveEffectCamera(Canvas canvas)
+        {
+            if (canvas != null && canvas.worldCamera != null)
+            {
+                return canvas.worldCamera;
+            }
+
+            if (Camera.main != null)
+            {
+                return Camera.main;
+            }
+
+            return FindFirstObjectByType<Camera>();
         }
 
         private IEnumerator PlayGuardAction(BattleSystem battleSystem, BattleTurnReport report, UnitView actorView, BattleActionResult actionResult)
@@ -268,6 +422,37 @@ namespace DiceRogue
 
             viewLookup.TryGetValue(targetResult.Target, out var targetView);
             return targetView;
+        }
+
+        private UnitView GetPreviewTargetView()
+        {
+            for (var index = 0; index < enemyViews.Length; index++)
+            {
+                if (enemyViews[index] != null && enemyViews[index].gameObject.activeInHierarchy && enemyViews[index].BoundState != null)
+                {
+                    return enemyViews[index];
+                }
+            }
+
+            return playerView != null && playerView.gameObject.activeInHierarchy ? playerView : null;
+        }
+
+        private UnitView GetPreviewActorView(UnitView previewTarget)
+        {
+            if (previewTarget != null && previewTarget != playerView && playerView != null && playerView.gameObject.activeInHierarchy)
+            {
+                return playerView;
+            }
+
+            for (var index = 0; index < enemyViews.Length; index++)
+            {
+                if (enemyViews[index] != null && enemyViews[index] != previewTarget && enemyViews[index].gameObject.activeInHierarchy)
+                {
+                    return enemyViews[index];
+                }
+            }
+
+            return playerView;
         }
     }
 }
